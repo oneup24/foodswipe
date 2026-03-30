@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
-import { MOCK_RESTAURANTS } from "@/lib/mock-data";
+// ✅ REMOVED: import { MOCK_RESTAURANTS } from "@/lib/mock-data";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -27,7 +27,8 @@ export default function RestaurantDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
-  const restaurant = MOCK_RESTAURANTS.find((r) => r.id === id);
+  // ✅ CHANGED: use real data from context instead of MOCK_RESTAURANTS
+  const restaurant = state.allRestaurants.find((r) => r.id === id);
   const isLiked = state.likedRestaurants.some((r) => r.id === id);
 
   const handleLike = useCallback(() => {

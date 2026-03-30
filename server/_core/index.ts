@@ -60,6 +60,30 @@ async function startServer() {
     res.json({ ok: true, timestamp: Date.now() });
   });
 
+  // Proxy Google Places photos to avoid exposing the API key to clients
+  app.get("/api/places/photo", async (req, res) => {
+    const ref = req.query.ref as string;
+    if (!ref) {
+      res.status(400).json({ error: "Missing ref" });
+      return;
+    }
+    const url = new URL("https://maps.googleapis.com/maps/api/place/photo");
+    url.searchParams.set("maxwidth", "800");
+    url.searchParams.set("photo_reference", ref);
+    url.searchParams.set("key", process.env.GOOGLE_PLACES_API_KEY ?? "");
+    try {
+      const upstream = await fetch(url.toString());
+      res.status(upstream.status);
+      const contentType = upstream.headers.get("content-type");
+      if (contentType) res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      const buffer = await upstream.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch {
+      res.status(502).json({ error: "Failed to fetch photo" });
+    }
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
