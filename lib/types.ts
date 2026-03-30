@@ -1,0 +1,65 @@
+export type PriceLevel = 1 | 2 | 3 | 4;
+
+export type CuisineType =
+  | "Italian"
+  | "Japanese"
+  | "Chinese"
+  | "Mexican"
+  | "American"
+  | "Thai"
+  | "Indian"
+  | "French"
+  | "Mediterranean"
+  | "Korean"
+  | "Vietnamese"
+  | "Greek"
+  | "Spanish"
+  | "Middle Eastern"
+  | "Seafood"
+  | "Steakhouse"
+  | "Pizza"
+  | "Sushi"
+  | "Burgers"
+  | "Desserts";
+
+export type Restaurant = {
+  id: string;
+  name: string;
+  cuisine: CuisineType[];
+  rating: number;
+  reviewCount: number;
+  priceLevel: PriceLevel;
+  distance: number; // km
+  imageUrl: string;
+  address: string;
+  isOpen: boolean;
+  openingHours?: string;
+  lat: number;
+  lng: number;
+  description?: string;
+};
+
+export type SwipeDirection = "left" | "right" | "up";
+
+export type FilterState = {
+  cuisines: CuisineType[];
+  priceRange: PriceLevel[];
+  maxDistance: number;
+  minRating: number;
+  openNow: boolean;
+};
+
+export type LocationState = {
+  lat: number;
+  lng: number;
+  cityName: string;
+};
+
+export type AppState = {
+  restaurants: Restaurant[];
+  cardStack: Restaurant[];
+  likedRestaurants: Restaurant[];
+  filters: FilterState;
+  location: LocationState;
+  isLoading: boolean;
+};
