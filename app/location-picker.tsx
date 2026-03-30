@@ -18,6 +18,16 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
 import { LocationState } from "@/lib/types";
+import { trpc } from "@/lib/trpc";
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
 
 // Preset cities for quick selection
 const PRESET_CITIES: LocationState[] = [
@@ -51,12 +61,39 @@ export default function LocationPickerScreen() {
 
   const [query, setQuery] = useState("");
   const [isLocating, setIsLocating] = useState(false);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
 
-  const filteredCities = query.trim().length > 0
-    ? PRESET_CITIES.filter((c) =>
-        c.cityName.toLowerCase().includes(query.toLowerCase())
-      )
-    : PRESET_CITIES;
+  const debouncedQuery = useDebounce(query, 350);
+  const isSearching = debouncedQuery.trim().length > 1;
+
+  const { data: predictions, isFetching: isFetchingPredictions } =
+    trpc.places.autocomplete.useQuery(
+      { query: debouncedQuery },
+      { enabled: isSearching }
+    );
+
+  const { data: placeDetails } = trpc.places.details.useQuery(
+    { placeId: selectedPlaceId! },
+    {
+      enabled: !!selectedPlaceId,
+    }
+  );
+
+  useEffect(() => {
+    if (placeDetails && selectedPlaceId) {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      setLocation(placeDetails);
+      router.back();
+    }
+  }, [placeDetails, selectedPlaceId]);
+
+  const filteredCities = PRESET_CITIES.filter((c) =>
+    query.trim().length > 0
+      ? c.cityName.toLowerCase().includes(query.toLowerCase())
+      : true
+  );
 
   const handleSelectCity = useCallback(
     (city: LocationState) => {
@@ -228,25 +265,58 @@ export default function LocationPickerScreen() {
       </View>
 
       {/* City List */}
-      <FlatList
-        data={filteredCities}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.cityName}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-        ListHeaderComponent={
-          <Text style={[styles.listHeader, { color: colors.muted }]}>
-            {query ? `Results for "${query}"` : "Popular Cities"}
-          </Text>
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: colors.muted }]}>
-              No cities found for "{query}"
+      {isSearching ? (
+        <FlatList
+          data={predictions ?? []}
+          keyExtractor={(item) => item.placeId}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+          ListHeaderComponent={
+            <Text style={[styles.listHeader, { color: colors.muted }]}>
+              {isFetchingPredictions ? "Searching..." : `Results for "${debouncedQuery}"`}
             </Text>
-          </View>
-        }
-      />
+          }
+          ListEmptyComponent={
+            !isFetchingPredictions ? (
+              <View style={styles.emptyState}>
+                <Text style={[styles.emptyText, { color: colors.muted }]}>
+                  No places found for "{debouncedQuery}"
+                </Text>
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => setSelectedPlaceId(item.placeId)}
+              style={({ pressed }) => [
+                styles.cityRow,
+                { borderBottomColor: colors.border },
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              <View style={[styles.cityIcon, { backgroundColor: colors.surface }]}>
+                <IconSymbol name="location.fill" size={16} color={colors.muted} />
+              </View>
+              <Text style={[styles.cityName, { color: colors.foreground }]}>
+                {item.description}
+              </Text>
+            </Pressable>
+          )}
+        />
+      ) : (
+        <FlatList
+          data={filteredCities}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.cityName}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+          ListHeaderComponent={
+            <Text style={[styles.listHeader, { color: colors.muted }]}>
+              Popular Cities
+            </Text>
+          }
+        />
+      )}
     </View>
   );
 }

@@ -9,6 +9,7 @@ import React, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Restaurant, FilterState, LocationState, CuisineType, PriceLevel } from "./types";
 import { MOCK_RESTAURANTS, getFilteredRestaurants } from "./mock-data";
+import { trpc } from "./trpc";
 
 const LIKED_STORAGE_KEY = "@foodswipe_liked";
 
@@ -29,6 +30,7 @@ type Action =
   | { type: "UNLIKE"; id: string }
   | { type: "SET_FILTERS"; filters: FilterState }
   | { type: "SET_LOCATION"; location: LocationState }
+  | { type: "SET_RESTAURANTS"; restaurants: Restaurant[] }
   | { type: "RESET_STACK" }
   | { type: "SET_LOADING"; loading: boolean };
 
@@ -86,6 +88,10 @@ function reducer(state: State, action: Action): State {
     }
     case "SET_LOCATION":
       return { ...state, location: action.location };
+    case "SET_RESTAURANTS": {
+      const newStack = buildStack(action.restaurants, state.filters);
+      return { ...state, allRestaurants: action.restaurants, cardStack: newStack };
+    }
     case "RESET_STACK": {
       const newStack = buildStack(state.allRestaurants, state.filters);
       return { ...state, cardStack: newStack };
@@ -120,6 +126,23 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     isLoading: false,
     allRestaurants: MOCK_RESTAURANTS,
   });
+
+  // Fetch real restaurants from Google Places when location changes
+  const { data: nearbyData, isLoading: isFetchingRestaurants } =
+    trpc.places.nearbyRestaurants.useQuery(
+      { lat: state.location.lat, lng: state.location.lng },
+      { retry: false },
+    );
+
+  useEffect(() => {
+    if (nearbyData && nearbyData.length > 0) {
+      dispatch({ type: "SET_RESTAURANTS", restaurants: nearbyData as Restaurant[] });
+    }
+  }, [nearbyData]);
+
+  useEffect(() => {
+    dispatch({ type: "SET_LOADING", loading: isFetchingRestaurants });
+  }, [isFetchingRestaurants]);
 
   // Load persisted liked restaurants on mount
   useEffect(() => {
