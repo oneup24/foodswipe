@@ -6,6 +6,7 @@ import {
   Dimensions,
   Pressable,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -112,6 +113,7 @@ export default function DiscoverScreen() {
   }, [state.cardStack, swipeUp, showToast]);
 
   const visibleCards = state.cardStack.slice(0, 4);
+  const { isFetchingMore } = state;
 
   return (
     <ScreenContainer containerClassName="bg-background" className="flex-1">
@@ -162,26 +164,35 @@ export default function DiscoverScreen() {
       {/* Card Stack Area */}
       <View style={styles.cardArea}>
         {visibleCards.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>🍽️</Text>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-              You've seen them all!
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-              Try adjusting your filters or change location to discover more restaurants.
-            </Text>
-            <Pressable
-              onPress={resetStack}
-              style={({ pressed }) => [
-                styles.refreshButton,
-                { backgroundColor: colors.primary },
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <IconSymbol name="arrow.counterclockwise" size={16} color="#fff" />
-              <Text style={styles.refreshButtonText}>Refresh</Text>
-            </Pressable>
-          </View>
+          isFetchingMore ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.emptySubtitle, { color: colors.muted, marginTop: 12 }]}>
+                Finding more restaurants…
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>🍽️</Text>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                You've seen them all!
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+                Try adjusting your filters or change location to discover more restaurants.
+              </Text>
+              <Pressable
+                onPress={resetStack}
+                style={({ pressed }) => [
+                  styles.refreshButton,
+                  { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <IconSymbol name="arrow.counterclockwise" size={16} color="#fff" />
+                <Text style={styles.refreshButtonText}>Refresh</Text>
+              </Pressable>
+            </View>
+          )
         ) : (
           <View style={[styles.cardStack, { width: CARD_WIDTH }]}>
             {[...visibleCards].reverse().map((restaurant, reversedIndex) => {

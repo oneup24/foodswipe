@@ -100,16 +100,27 @@ export const appRouter = router({
       }),
 
     nearbyRestaurants: publicProcedure
-      .input(z.object({ lat: z.number(), lng: z.number(), radius: z.number().default(10000) }))
-      .query(async ({ input }) => {
-        const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-        url.searchParams.set("location", `${input.lat},${input.lng}`);
-        url.searchParams.set("radius", String(input.radius));
-        url.searchParams.set("type", "restaurant");
-        url.searchParams.set("key", ENV.googlePlacesApiKey);
+      .input(z.object({
+        lat: z.number(),
+        lng: z.number(),
+        radius: z.number().default(10000),
+        pageToken: z.string().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        const reqProto = (ctx.req.headers["x-forwarded-proto"] as string) || (ctx.req.socket && (ctx.req.socket as any).encrypted ? "https" : "http");
+        const reqHost = ctx.req.headers.host ?? "localhost:3000";
+        const serverBase = `${reqProto}://${reqHost}`;
 
-        const res = await fetch(url.toString());
-        if (!res.ok) throw new Error("Google Places Nearby Search failed");
+        const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
+        if (input.pageToken) {
+          // Page token encodes all prior search params; only key is needed alongside it
+          url.searchParams.set("pagetoken", input.pageToken);
+        } else {
+          url.searchParams.set("location", `${input.lat},${input.lng}`);
+          url.searchParams.set("radius", String(input.radius));
+          url.searchParams.set("type", "restaurant");
+        }
+        url.searchParams.set("key", ENV.googlePlacesApiKey);
 
         type GPlace = {
           place_id: string;
@@ -123,17 +134,26 @@ export const appRouter = router({
           photos?: { photo_reference: string }[];
           types: string[];
         };
+        type PlacesResponse = { results: GPlace[]; next_page_token?: string; status: string };
 
-        const data = await res.json() as { results: GPlace[] };
+        // Page tokens need ~2s to activate; retry once on INVALID_REQUEST
+        let data: PlacesResponse = { results: [], status: "UNKNOWN" };
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const res = await fetch(url.toString());
+          if (!res.ok) throw new Error("Google Places Nearby Search failed");
+          data = await res.json() as PlacesResponse;
+          if (data.status !== "INVALID_REQUEST") break;
+          await new Promise((r) => setTimeout(r, 2000));
+        }
 
-        return data.results.map((place) => {
+        const restaurants = data.results.map((place) => {
           const cuisines = place.types
             .map((t) => CUISINE_MAP[t])
             .filter((c): c is string => !!c);
 
           const photoRef = place.photos?.[0]?.photo_reference;
           const imageUrl = photoRef
-            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${ENV.googlePlacesApiKey}`
+            ? `${serverBase}/api/places/photo?ref=${encodeURIComponent(photoRef)}`
             : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800";
 
           return {
@@ -151,6 +171,8 @@ export const appRouter = router({
             lng: place.geometry.location.lng,
           };
         });
+
+        return { restaurants, nextPageToken: data.next_page_token ?? null };
       }),
   }),
 });
