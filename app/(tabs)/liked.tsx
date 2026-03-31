@@ -7,6 +7,7 @@ import {
   Pressable,
   Dimensions,
   Alert,
+  Share,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -37,11 +38,20 @@ function RestaurantCard({
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`;
     Alert.alert(
-      "Remove from Liked?",
-      `Remove ${restaurant.name} from your liked restaurants?`,
+      restaurant.name,
+      `${restaurant.cuisine[0] ?? "Restaurant"} · ${"$".repeat(restaurant.priceLevel)} · ${restaurant.rating}/5`,
       [
         { text: "Cancel", style: "cancel" },
+        {
+          text: "Share",
+          onPress: () =>
+            Share.share({
+              title: restaurant.name,
+              message: `${restaurant.name}\n${restaurant.cuisine.join(" · ")} · ${"$".repeat(restaurant.priceLevel)}\nRating: ${restaurant.rating}/5 · ${restaurant.distance.toFixed(1)}km away\n${restaurant.address}\n\n${mapsUrl}`,
+            }),
+        },
         {
           text: "Remove",
           style: "destructive",
@@ -65,7 +75,7 @@ function RestaurantCard({
       ]}
     >
       <Image
-        source={{ uri: restaurant.imageUrl }}
+        source={{ uri: restaurant.photos?.[0] ?? restaurant.imageUrl }}
         style={styles.cardImage}
         contentFit="cover"
         transition={200}
@@ -101,6 +111,10 @@ export default function LikedScreen() {
   const colors = useColors();
   const router = useRouter();
 
+  const handlePrivacy = useCallback(() => {
+    router.push("/privacy-policy");
+  }, [router]);
+
   const handlePress = useCallback(
     (restaurant: Restaurant) => {
       router.push({
@@ -133,13 +147,18 @@ export default function LikedScreen() {
     <ScreenContainer containerClassName="bg-background" className="flex-1">
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-          Liked Restaurants
-        </Text>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Liked
+          </Text>
+          {state.likedRestaurants.length > 0 && (
+            <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.countText}>{state.likedRestaurants.length}</Text>
+            </View>
+          )}
+        </View>
         {state.likedRestaurants.length > 0 && (
-          <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.countText}>{state.likedRestaurants.length}</Text>
-          </View>
+          <Text style={[styles.headerSub, { color: colors.muted }]}>Most recent first</Text>
         )}
       </View>
 
@@ -167,7 +186,7 @@ export default function LikedScreen() {
       ) : (
         <>
           <Text style={[styles.hintText, { color: colors.muted }]}>
-            Long press to remove · Tap to view details
+            Long press to share or remove · Tap to view details
           </Text>
           <FlatList
             data={state.likedRestaurants}
@@ -180,6 +199,13 @@ export default function LikedScreen() {
           />
         </>
       )}
+      {/* Privacy Policy link */}
+      <Pressable
+        onPress={handlePrivacy}
+        style={({ pressed }) => [styles.privacyLink, pressed && { opacity: 0.5 }]}
+      >
+        <Text style={[styles.privacyText, { color: colors.muted }]}>Privacy Policy</Text>
+      </Pressable>
     </ScreenContainer>
   );
 }
@@ -188,14 +214,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 0.5,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: "800",
+  },
+  headerSub: {
+    fontSize: 12,
+    fontWeight: "500",
   },
   countBadge: {
     paddingHorizontal: 10,
@@ -329,5 +364,13 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  privacyLink: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  privacyText: {
+    fontSize: 12,
+    textDecorationLine: "underline",
   },
 });

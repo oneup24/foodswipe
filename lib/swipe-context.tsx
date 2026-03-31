@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Location from "expo-location";
 import { Restaurant, FilterState, LocationState, CuisineType, PriceLevel } from "./types";
 import { trpc } from "./trpc";
 
@@ -44,7 +45,7 @@ type Action =
 const DEFAULT_FILTERS: FilterState = {
   cuisines: [],
   priceRange: [],
-  maxDistance: 10,
+  maxDistance: 2,
   minRating: 0,
   openNow: false,
 };
@@ -120,11 +121,11 @@ function reducer(state: State, action: Action): State {
         allRestaurants: [],
         cardStack: [],
         isLoading: true,
-        seenPlaceIds: new Set(),
+        seenPlaceIds: new Set<string>(),
         nextPageToken: null,
         searchLat: action.location.lat,
         searchLng: action.location.lng,
-        searchRadius: 10000,
+        searchRadius: 2000,
         isFetchingMore: false,
       };
     case "SET_RESTAURANTS": {
@@ -138,7 +139,7 @@ function reducer(state: State, action: Action): State {
         nextPageToken: action.nextPageToken,
         searchLat: state.location.lat,
         searchLng: state.location.lng,
-        searchRadius: 10000,
+        searchRadius: 2000,
       };
     }
     case "APPEND_RESTAURANTS": {
@@ -194,11 +195,11 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     location: DEFAULT_LOCATION,
     isLoading: true,
     allRestaurants: [],
-    seenPlaceIds: new Set(),
+    seenPlaceIds: new Set<string>(),
     nextPageToken: null,
     searchLat: DEFAULT_LOCATION.lat,
     searchLng: DEFAULT_LOCATION.lng,
-    searchRadius: 10000,
+    searchRadius: 2000,
     isFetchingMore: false,
   });
 
@@ -207,7 +208,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
   // Initial fetch via useQuery — re-runs whenever location changes
   const { data: nearbyData, isLoading: isFetchingRestaurants, error: trpcError } =
     trpc.places.nearbyRestaurants.useQuery(
-      { lat: state.location.lat, lng: state.location.lng },
+      { lat: state.location.lat, lng: state.location.lng, radius: 2000 },
       { retry: false },
     );
 
@@ -251,7 +252,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         const angle = Math.random() * 2 * Math.PI;
         lat = snap.location.lat + magnitude * Math.sin(angle);
         lng = snap.location.lng + magnitude * Math.cos(angle);
-        radius = Math.min(radius + 500, 50000);
+        radius = Math.min(radius + 500, snap.filters.maxDistance * 1000);
         pageToken = null;
       }
 
@@ -302,6 +303,36 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.cardStack.length, state.isFetchingMore, state.isLoading, state.allRestaurants.length]);
+
+  // Auto-detect location on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        const [address] = await Location.reverseGeocodeAsync({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+
+        const cityName =
+          [address?.city, address?.region, address?.country].filter(Boolean).join(", ") ||
+          "My Location";
+
+        dispatch({
+          type: "SET_LOCATION",
+          location: { lat: loc.coords.latitude, lng: loc.coords.longitude, cityName },
+        });
+      } catch {
+        // Fall back to default location silently
+      }
+    })();
+  }, []);
 
   // Load persisted liked restaurants on mount
   useEffect(() => {

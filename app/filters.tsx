@@ -86,7 +86,7 @@ export default function FiltersScreen() {
     const reset: FilterState = {
       cuisines: [],
       priceRange: [],
-      maxDistance: 10,
+      maxDistance: 2,
       minRating: 0,
       openNow: false,
     };

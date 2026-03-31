@@ -1,11 +1,13 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { initAds } from "@/lib/ads";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
@@ -33,6 +35,15 @@ export default function RootLayout() {
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
+  const router = useRouter();
+
+  // Initialize AdMob and redirect to onboarding on first launch
+  useEffect(() => {
+    initAds();
+    AsyncStorage.getItem("@foodswipe_onboarded").then((val) => {
+      if (!val) router.replace("/onboarding");
+    });
+  }, []);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
@@ -89,6 +100,7 @@ export default function RootLayout() {
           <SwipeProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="onboarding" />
               <Stack.Screen name="oauth/callback" />
               <Stack.Screen
                 name="location-picker"
@@ -100,6 +112,10 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="filters"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="privacy-policy"
                 options={{ presentation: "modal", headerShown: false }}
               />
             </Stack>

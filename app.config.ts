@@ -95,10 +95,22 @@ const config: ExpoConfig = {
         },
       },
     ],
+    [
+      "react-native-google-mobile-ads",
+      {
+        androidAppId: "ca-app-pub-6069605844156739~1007592422",
+        iosAppId: "ca-app-pub-6069605844156739~4946837438",
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+  },
+  extra: {
+    eas: {
+      projectId: "a9753449-0ed3-4608-bfeb-bb4e9a710544",
+    },
   },
 };
 

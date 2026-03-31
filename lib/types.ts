@@ -25,12 +25,13 @@ export type CuisineType =
 export type Restaurant = {
   id: string;
   name: string;
-  cuisine: CuisineType[];
+  cuisine: string[];
   rating: number;
   reviewCount: number;
   priceLevel: PriceLevel;
   distance: number; // km
   imageUrl: string;
+  photos: string[];
   address: string;
   isOpen: boolean;
   openingHours?: string;

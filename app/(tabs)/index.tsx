@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
 import { Restaurant } from "@/lib/types";
+import { useInterstitialAd, useRewardedAd, AD_UNITS } from "@/lib/ads";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH - 32;
@@ -31,6 +32,36 @@ export default function DiscoverScreen() {
   const colors = useColors();
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
+  const swipeCountRef = useRef(0);
+
+  // Ads
+  const {
+    isLoaded: isInterstitialLoaded,
+    isClosed: isInterstitialClosed,
+    load: loadInterstitial,
+    show: showInterstitial,
+  } = useInterstitialAd(AD_UNITS.interstitial);
+
+  const {
+    isLoaded: isRewardedLoaded,
+    isEarnedReward,
+    load: loadRewarded,
+    show: showRewarded,
+  } = useRewardedAd(AD_UNITS.rewarded);
+
+  // Load interstitial on mount; reload after it closes
+  useEffect(() => { loadInterstitial(); }, [loadInterstitial]);
+  useEffect(() => { if (isInterstitialClosed) loadInterstitial(); }, [isInterstitialClosed, loadInterstitial]);
+
+  // Pre-load rewarded ad when stack is running low
+  useEffect(() => {
+    if (state.cardStack.length <= 3) loadRewarded();
+  }, [state.cardStack.length, loadRewarded]);
+
+  // Rewarded ad completed — reset the card stack
+  useEffect(() => {
+    if (isEarnedReward) resetStack();
+  }, [isEarnedReward, resetStack]);
 
   // Toast animation
   const toastOpacity = useSharedValue(0);
@@ -54,24 +85,34 @@ export default function DiscoverScreen() {
     transform: [{ translateY: toastTranslateY.value }],
   }));
 
+  const maybeShowInterstitial = useCallback(() => {
+    swipeCountRef.current += 1;
+    if (swipeCountRef.current % 10 === 0 && isInterstitialLoaded) {
+      showInterstitial();
+    }
+  }, [isInterstitialLoaded, showInterstitial]);
+
   const handleSwipeRight = useCallback(
     (restaurant: Restaurant) => {
       swipeRight(restaurant);
       showToast(`❤️ Liked ${restaurant.name}!`);
+      maybeShowInterstitial();
     },
-    [swipeRight, showToast]
+    [swipeRight, showToast, maybeShowInterstitial]
   );
 
   const handleSwipeLeft = useCallback(() => {
     swipeLeft();
-  }, [swipeLeft]);
+    maybeShowInterstitial();
+  }, [swipeLeft, maybeShowInterstitial]);
 
   const handleSwipeUp = useCallback(
     (restaurant: Restaurant) => {
       swipeUp(restaurant);
       showToast(`⭐ Super Liked ${restaurant.name}!`);
+      maybeShowInterstitial();
     },
-    [swipeUp, showToast]
+    [swipeUp, showToast, maybeShowInterstitial]
   );
 
   const handlePress = useCallback(
@@ -92,7 +133,8 @@ export default function DiscoverScreen() {
     const top = state.cardStack[0];
     swipeRight(top);
     showToast(`❤️ Liked ${top.name}!`);
-  }, [state.cardStack, swipeRight, showToast]);
+    maybeShowInterstitial();
+  }, [state.cardStack, swipeRight, showToast, maybeShowInterstitial]);
 
   const handlePassButton = useCallback(() => {
     if (state.cardStack.length === 0) return;
@@ -100,7 +142,8 @@ export default function DiscoverScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     swipeLeft();
-  }, [state.cardStack, swipeLeft]);
+    maybeShowInterstitial();
+  }, [state.cardStack, swipeLeft, maybeShowInterstitial]);
 
   const handleSuperLikeButton = useCallback(() => {
     if (state.cardStack.length === 0) return;
@@ -110,7 +153,8 @@ export default function DiscoverScreen() {
     const top = state.cardStack[0];
     swipeUp(top);
     showToast(`⭐ Super Liked ${top.name}!`);
-  }, [state.cardStack, swipeUp, showToast]);
+    maybeShowInterstitial();
+  }, [state.cardStack, swipeUp, showToast, maybeShowInterstitial]);
 
   const visibleCards = state.cardStack.slice(0, 4);
   const { isFetchingMore } = state;
@@ -178,19 +222,32 @@ export default function DiscoverScreen() {
                 You've seen them all!
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-                Try adjusting your filters or change location to discover more restaurants.
+                Watch a short ad to unlock more restaurants nearby.
               </Text>
-              <Pressable
-                onPress={resetStack}
-                style={({ pressed }) => [
-                  styles.refreshButton,
-                  { backgroundColor: colors.primary },
-                  pressed && { opacity: 0.8 },
-                ]}
-              >
-                <IconSymbol name="arrow.counterclockwise" size={16} color="#fff" />
-                <Text style={styles.refreshButtonText}>Refresh</Text>
-              </Pressable>
+              {isRewardedLoaded ? (
+                <Pressable
+                  onPress={showRewarded}
+                  style={({ pressed }) => [
+                    styles.refreshButton,
+                    { backgroundColor: "#FF9500" },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <Text style={styles.refreshButtonText}>Watch Ad for More</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={resetStack}
+                  style={({ pressed }) => [
+                    styles.refreshButton,
+                    { backgroundColor: colors.primary },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <IconSymbol name="arrow.counterclockwise" size={16} color="#fff" />
+                  <Text style={styles.refreshButtonText}>Refresh</Text>
+                </Pressable>
+              )}
             </View>
           )
         ) : (
@@ -258,10 +315,10 @@ export default function DiscoverScreen() {
         </View>
       )}
 
-      {/* Hint text */}
+      {/* Hint text + count */}
       {visibleCards.length > 0 && (
         <Text style={[styles.hint, { color: colors.muted }]}>
-          Swipe right to like · Swipe up to super like
+          {state.cardStack.length} nearby · Swipe right to like · Up to super like
         </Text>
       )}
 

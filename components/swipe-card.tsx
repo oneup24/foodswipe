@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -62,6 +62,22 @@ export function SwipeCard({
   const translateY = useSharedValue(0);
   const scale = useSharedValue(isTop ? 1 : 0.95 - index * 0.02);
 
+  const photos = restaurant.photos?.length ? restaurant.photos : [restaurant.imageUrl];
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const photoIndexRef = useRef(0);
+
+  const goNextPhoto = useCallback(() => {
+    const next = Math.min(photos.length - 1, photoIndexRef.current + 1);
+    photoIndexRef.current = next;
+    setPhotoIndex(next);
+  }, [photos.length]);
+
+  const goPrevPhoto = useCallback(() => {
+    const prev = Math.max(0, photoIndexRef.current - 1);
+    photoIndexRef.current = prev;
+    setPhotoIndex(prev);
+  }, []);
+
   const handleSwipeRight = useCallback(() => {
     triggerHaptic("like");
     onSwipeRight(restaurant);
@@ -121,10 +137,19 @@ export function SwipeCard({
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
     .maxDuration(200)
-    .onEnd(() => {
-      if (isTop) {
-        runOnJS(handlePress)();
+    .onEnd((event) => {
+      if (!isTop) return;
+      if (photos.length > 1) {
+        if (event.x < CARD_WIDTH * 0.33) {
+          runOnJS(goPrevPhoto)();
+          return;
+        }
+        if (event.x > CARD_WIDTH * 0.67) {
+          runOnJS(goNextPhoto)();
+          return;
+        }
       }
+      runOnJS(handlePress)();
     });
 
   const composedGesture = Gesture.Simultaneous(gesture, tapGesture);
@@ -185,11 +210,27 @@ export function SwipeCard({
       >
         {/* Hero Image */}
         <Image
-          source={{ uri: restaurant.imageUrl }}
+          source={{ uri: photos[photoIndex] }}
           style={styles.image}
           contentFit="cover"
           transition={200}
         />
+
+        {/* Photo dots */}
+        {photos.length > 1 && (
+          <View style={styles.dotsRow}>
+            {photos.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.photoDot,
+                  { backgroundColor: i === photoIndex ? "#fff" : "rgba(255,255,255,0.45)" },
+                  i === photoIndex && { width: 16 },
+                ]}
+              />
+            ))}
+          </View>
+        )}
 
         {/* Gradient overlay at bottom */}
         <View style={styles.gradient} />
@@ -234,7 +275,7 @@ export function SwipeCard({
 
           <View style={styles.metaRow}>
             <Text style={styles.cuisine}>
-              {restaurant.cuisine.slice(0, 2).join(" · ")}
+              {restaurant.cuisine.slice(0, 2).join(" · ") || "Restaurant"}
             </Text>
             <Text style={styles.dot}>·</Text>
             <Text style={styles.distance}>{restaurant.distance.toFixed(1)} km</Text>
@@ -278,6 +319,21 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     // Simulated gradient using multiple overlapping views
     backgroundImage: undefined,
+  },
+  dotsRow: {
+    position: "absolute",
+    top: 12,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  photoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   overlay: {
     position: "absolute",
