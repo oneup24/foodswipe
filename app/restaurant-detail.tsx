@@ -18,6 +18,7 @@ import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
+import * as ImagePicker from "expo-image-picker";
 import { captureRef } from "react-native-view-shot";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -27,6 +28,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useLanguage } from "@/hooks/use-language";
 import { trpc } from "@/lib/trpc";
 import { RestaurantShareCard, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT } from "@/components/restaurant-share-card";
+import { RestaurantStoriesCard, STORIES_CARD_WIDTH, STORIES_CARD_HEIGHT } from "@/components/restaurant-stories-card";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -43,9 +45,13 @@ export default function RestaurantDetailScreen() {
   const isLiked = state.likedRestaurants.some((r) => r.id === id);
 
   const shareCardRef = useRef<View>(null);
+  const storiesCardRef = useRef<View>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSaveToList, setShowSaveToList] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [showStoriesFlow, setShowStoriesFlow] = useState(false);
+  const [userMealPhoto, setUserMealPhoto] = useState<string | undefined>(undefined);
+  const [isCapturingStories, setIsCapturingStories] = useState(false);
 
   const heroPhotos = restaurant?.photos?.length ? restaurant.photos : restaurant ? [restaurant.imageUrl] : [];
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -187,6 +193,53 @@ export default function RestaurantDetailScreen() {
   const handleGoogleReview = useCallback(() => {
     Linking.openURL(`https://search.google.com/local/writereview?placeid=${id}`);
   }, [id]);
+
+  const handlePickMealPhoto = useCallback(async () => {
+    if (Platform.OS === "web") return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [9, 16],
+      quality: 0.9,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setUserMealPhoto(result.assets[0].uri);
+    }
+  }, []);
+
+  const handleShareToInstagramStories = useCallback(async () => {
+    if (!restaurant || !storiesCardRef.current) return;
+    setIsCapturingStories(true);
+    try {
+      const uri = await captureRef(storiesCardRef, {
+        format: "png",
+        quality: 1,
+        result: "tmpfile",
+      });
+      // Try Instagram Stories deep link first
+      const canOpenInstagram = await Linking.canOpenURL("instagram-stories://share").catch(() => false);
+      if (canOpenInstagram) {
+        await Linking.openURL("instagram-stories://share");
+        // Note: image data delivery via pasteboard requires native code;
+        // the share sheet fallback below handles image transfer reliably
+      }
+      // Share via native sheet (includes Instagram Stories on iOS)
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: `Share ${restaurant.name} to Instagram Stories` });
+      }
+    } catch {
+      // Fallback to generic share
+      if (restaurant) {
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`;
+        await Share.share({ title: restaurant.name, message: `${restaurant.name}\n${restaurant.address}\n${mapsUrl}` });
+      }
+    } finally {
+      setIsCapturingStories(false);
+      setShowShareModal(false);
+      setShowStoriesFlow(false);
+    }
+  }, [restaurant]);
 
   if (!restaurant) {
     return (
@@ -489,53 +542,137 @@ export default function RestaurantDetailScreen() {
         visible={showShareModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowShareModal(false)}
+        onRequestClose={() => {
+          setShowShareModal(false);
+          setShowStoriesFlow(false);
+          setUserMealPhoto(undefined);
+        }}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowShareModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => {
+          setShowShareModal(false);
+          setShowStoriesFlow(false);
+          setUserMealPhoto(undefined);
+        }}>
           <Pressable style={[styles.modalSheet, { backgroundColor: colors.surface }]} onPress={() => {}}>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Share Restaurant</Text>
 
-            {/* Card preview */}
-            {restaurant && (
-              <View style={styles.cardPreviewWrapper}>
-                <RestaurantShareCard ref={shareCardRef} restaurant={restaurant} />
-              </View>
-            )}
+            {!showStoriesFlow ? (
+              // --- Regular share flow ---
+              <>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Share Restaurant</Text>
 
-            {/* Actions */}
-            <View style={styles.shareActions}>
-              <Pressable
-                onPress={handleShareImage}
-                disabled={isCapturing}
-                style={({ pressed }) => [
-                  styles.shareBtn,
-                  { backgroundColor: colors.primary },
-                  pressed && { opacity: 0.8 },
-                  isCapturing && { opacity: 0.6 },
-                ]}
-              >
-                <IconSymbol name="photo" size={18} color="#fff" />
-                <Text style={styles.shareBtnText}>
-                  {isCapturing ? "Preparing…" : "Share Image"}
+                {restaurant && (
+                  <View style={styles.cardPreviewWrapper}>
+                    <RestaurantShareCard ref={shareCardRef} restaurant={restaurant} />
+                  </View>
+                )}
+
+                <View style={styles.shareActions}>
+                  <Pressable
+                    onPress={handleShareImage}
+                    disabled={isCapturing}
+                    style={({ pressed }) => [
+                      styles.shareBtn,
+                      { backgroundColor: colors.primary },
+                      pressed && { opacity: 0.8 },
+                      isCapturing && { opacity: 0.6 },
+                    ]}
+                  >
+                    <IconSymbol name="photo" size={18} color="#fff" />
+                    <Text style={styles.shareBtnText}>
+                      {isCapturing ? "Preparing…" : "Share Image"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={handleShareLink}
+                    style={({ pressed }) => [
+                      styles.shareBtn,
+                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <IconSymbol name="link" size={18} color={colors.foreground} />
+                    <Text style={[styles.shareBtnText, { color: colors.foreground }]}>Share Link</Text>
+                  </Pressable>
+
+                  {Platform.OS !== "web" && (
+                    <Pressable
+                      onPress={() => setShowStoriesFlow(true)}
+                      style={({ pressed }) => [
+                        styles.shareBtn,
+                        styles.instagramBtn,
+                        pressed && { opacity: 0.8 },
+                      ]}
+                    >
+                      <Text style={styles.instagramIcon}>📸</Text>
+                      <Text style={styles.shareBtnText}>Instagram Stories</Text>
+                    </Pressable>
+                  )}
+                </View>
+
+                <Pressable onPress={() => setShowShareModal(false)} style={styles.cancelBtn}>
+                  <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
+                </Pressable>
+              </>
+            ) : (
+              // --- Instagram Stories flow ---
+              <>
+                <View style={styles.storiesHeader}>
+                  <Pressable onPress={() => { setShowStoriesFlow(false); setUserMealPhoto(undefined); }} hitSlop={12}>
+                    <Text style={[styles.storiesBackText, { color: colors.muted }]}>← Back</Text>
+                  </Pressable>
+                  <Text style={[styles.modalTitle, { color: colors.foreground }]}>Instagram Stories</Text>
+                  <View style={{ width: 48 }} />
+                </View>
+
+                {/* Stories card preview */}
+                {restaurant && (
+                  <View style={styles.storiesPreviewWrapper}>
+                    <RestaurantStoriesCard
+                      ref={storiesCardRef}
+                      restaurant={restaurant}
+                      userPhoto={userMealPhoto}
+                    />
+                  </View>
+                )}
+
+                <View style={styles.shareActions}>
+                  <Pressable
+                    onPress={handlePickMealPhoto}
+                    style={({ pressed }) => [
+                      styles.shareBtn,
+                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 16 }}>📷</Text>
+                    <Text style={[styles.shareBtnText, { color: colors.foreground }]}>
+                      {userMealPhoto ? "Change Photo" : "Add Your Meal Photo"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={handleShareToInstagramStories}
+                    disabled={isCapturingStories}
+                    style={({ pressed }) => [
+                      styles.shareBtn,
+                      styles.instagramBtn,
+                      pressed && { opacity: 0.8 },
+                      isCapturingStories && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.instagramIcon}>📸</Text>
+                    <Text style={styles.shareBtnText}>
+                      {isCapturingStories ? "Preparing…" : "Share to Instagram"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <Text style={[styles.storiesHint, { color: colors.muted }]}>
+                  Opens the share sheet — tap Instagram to post to Stories
                 </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={handleShareLink}
-                style={({ pressed }) => [
-                  styles.shareBtn,
-                  { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <IconSymbol name="link" size={18} color={colors.foreground} />
-                <Text style={[styles.shareBtnText, { color: colors.foreground }]}>Share Link</Text>
-              </Pressable>
-            </View>
-
-            <Pressable onPress={() => setShowShareModal(false)} style={styles.cancelBtn}>
-              <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
-            </Pressable>
+              </>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -794,6 +931,25 @@ const styles = StyleSheet.create({
   passBtn: { backgroundColor: "transparent", borderWidth: 2, borderColor: "#FF3B30" },
   likeBtn: { backgroundColor: "#FF4B4B" },
   listActionBtn: { borderWidth: 1.5 },
+  instagramBtn: { backgroundColor: "#C13584" },
+  instagramIcon: { fontSize: 18 },
+  storiesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  storiesBackText: { fontSize: 14, fontWeight: "600" },
+  storiesPreviewWrapper: {
+    alignItems: "center",
+    transform: [{ scale: 0.45 }],
+    marginVertical: -(STORIES_CARD_HEIGHT * 0.55 / 2),
+  },
+  storiesHint: {
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
+  },
   passIcon: { fontSize: 18, color: "#FF3B30", fontWeight: "700" },
   passLabel: { fontSize: 16, color: "#FF3B30", fontWeight: "700" },
   likeIcon: { fontSize: 18, color: "#fff", fontWeight: "700" },
