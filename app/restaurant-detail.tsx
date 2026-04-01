@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   Share,
   Linking,
+  Modal,
   NativeSyntheticEvent,
   NativeScrollEvent,
   ActivityIndicator,
@@ -16,11 +17,15 @@ import {
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import * as Sharing from "expo-sharing";
+import { captureRef } from "react-native-view-shot";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
+import { useLanguage } from "@/hooks/use-language";
 import { trpc } from "@/lib/trpc";
+import { RestaurantShareCard, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT } from "@/components/restaurant-share-card";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -29,24 +34,66 @@ export default function RestaurantDetailScreen() {
   const router = useRouter();
   const { state, swipeRight, swipeLeft, unlike } = useSwipe();
   const colors = useColors();
+  const { t, currentLanguage } = useLanguage();
   const insets = useSafeAreaInsets();
 
   const restaurant = state.allRestaurants.find((r) => r.id === id)
     ?? state.likedRestaurants.find((r) => r.id === id);
   const isLiked = state.likedRestaurants.some((r) => r.id === id);
 
+  const shareCardRef = useRef<View>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+
   const heroPhotos = restaurant?.photos?.length ? restaurant.photos : restaurant ? [restaurant.imageUrl] : [];
   const [photoIndex, setPhotoIndex] = useState(0);
 
-  const { data: details, isLoading: isLoadingDetails } = trpc.places.restaurantDetails.useQuery(
+  const { data: details, isLoading: isLoadingDetails, isError: isDetailsError } = trpc.places.restaurantDetails.useQuery(
     { placeId: id! },
     { enabled: !!id }
   );
 
-  // Merge hero photos + detail photos, deduplicate by URL
-  const allPhotos = details?.photos?.length
-    ? [...new Set([...heroPhotos, ...details.photos])]
-    : heroPhotos;
+  // Grid photos: use detail API photos (authoritative), fall back to hero photos minus first
+  const gridPhotos = useMemo(() => {
+    if (details?.photos?.length) return details.photos;
+    return heroPhotos.slice(1);
+  }, [details?.photos, restaurant?.id]);
+
+  // Translate cuisine names - MOVE THIS EARLY
+  const translatedCuisines = useMemo(() => {
+    if (!restaurant) return [];
+    return restaurant.cuisine.map((c) => {
+      const key = c.toLowerCase().replace(/\s+/g, '');
+      return t(`cuisines.${key}`) || c;
+    });
+  }, [restaurant?.cuisine, t]);
+
+  // Translate hours (day names and AM/PM)
+  const translatedHours = useMemo(() => {
+    if (!details?.weekdayText) return null;
+    
+    const dayMap: Record<string, string> = {
+      Monday: t('days.monday'),
+      Tuesday: t('days.tuesday'),
+      Wednesday: t('days.wednesday'),
+      Thursday: t('days.thursday'),
+      Friday: t('days.friday'),
+      Saturday: t('days.saturday'),
+      Sunday: t('days.sunday'),
+    };
+
+    return details.weekdayText.map((line) => {
+      let translated = line;
+      // Replace day names
+      Object.entries(dayMap).forEach(([eng, local]) => {
+        translated = translated.replace(new RegExp(`^${eng}:`, 'i'), `${local}:`);
+      });
+      // Replace AM/PM
+      translated = translated.replace(/\bAM\b/g, t('time.am'));
+      translated = translated.replace(/\bPM\b/g, t('time.pm'));
+      return translated;
+    });
+  }, [details?.weekdayText, t]);
 
   const handlePhotoScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
@@ -63,17 +110,58 @@ export default function RestaurantDetailScreen() {
     }
   }, [restaurant, isLiked, swipeRight, unlike]);
 
-  const handleShare = useCallback(async () => {
-    if (!restaurant) return;
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`;
-    const priceString = "$".repeat(restaurant.priceLevel);
+  const handleShare = useCallback(() => {
+    setShowShareModal(true);
+  }, []);
+
+  const handleShareImage = useCallback(async () => {
+    if (!restaurant || !shareCardRef.current) return;
+    setIsCapturing(true);
     try {
-      await Share.share({
-        title: restaurant.name,
-        message: `${restaurant.name}\n${restaurant.cuisine.join(" · ")} · ${priceString}\nRating: ${restaurant.rating}/5 · ${restaurant.distance.toFixed(1)}km away\n${restaurant.address}\n\n${mapsUrl}`,
+      const uri = await captureRef(shareCardRef, {
+        format: "png",
+        quality: 1,
+        result: Platform.OS === "web" ? "data-uri" : "tmpfile",
       });
-    } catch {}
+
+      if (Platform.OS === "web") {
+        if (typeof navigator !== "undefined" && navigator.share) {
+          const res = await fetch(uri);
+          const blob = await res.blob();
+          const file = new File([blob], `${restaurant.name}.png`, { type: "image/png" });
+          await navigator.share({ files: [file], title: restaurant.name });
+        } else {
+          const a = document.createElement("a");
+          a.href = uri;
+          a.download = `${restaurant.name}.png`;
+          a.click();
+        }
+      } else {
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: `Share ${restaurant.name}` });
+        }
+      }
+    } catch {
+      // Fallback to text share
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`;
+      await Share.share({ title: restaurant.name, message: `${restaurant.name}\n${restaurant.address}\n${mapsUrl}` });
+    } finally {
+      setIsCapturing(false);
+      setShowShareModal(false);
+    }
   }, [restaurant]);
+
+  const handleShareLink = useCallback(async () => {
+    if (!restaurant) return;
+    const displayName = restaurant.nameLocalized?.[currentLanguage] || restaurant.name;
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`;
+    await Share.share({
+      title: displayName,
+      message: `${displayName}\n${translatedCuisines.join(" · ")} · ${"$".repeat(restaurant.priceLevel)}\n⭐ ${restaurant.rating}/5 · ${restaurant.distance.toFixed(1)}km ${t('restaurant.away')}\n${restaurant.address}\n\n${mapsUrl}`,
+    });
+    setShowShareModal(false);
+  }, [restaurant, translatedCuisines, t, currentLanguage]);
 
   const handleDirections = useCallback(() => {
     if (!restaurant) return;
@@ -103,7 +191,8 @@ export default function RestaurantDetailScreen() {
   }
 
   const priceString = "$".repeat(restaurant.priceLevel);
-  const priceLabel = ["", "Budget", "Moderate", "Upscale", "Fine Dining"][restaurant.priceLevel];
+  const priceLabelMap = ["", "budget", "moderateLabel", "upscale", "fineDining"];
+  const priceLabel = t(`priceLevel.${priceLabelMap[restaurant.priceLevel]}`);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -173,7 +262,7 @@ export default function RestaurantDetailScreen() {
         {/* Name & Price */}
         <View style={styles.nameRow}>
           <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={2}>
-            {restaurant.name}
+            {restaurant?.nameLocalized?.[currentLanguage] || restaurant?.name}
           </Text>
           <Text style={[styles.price, { color: colors.warning }]}>{priceString}</Text>
         </View>
@@ -189,11 +278,15 @@ export default function RestaurantDetailScreen() {
 
         {/* Cuisine Tags */}
         <View style={styles.tagsRow}>
-          {restaurant.cuisine.map((c) => (
-            <View key={c} style={[styles.tag, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.tagText, { color: colors.foreground }]}>{c}</Text>
-            </View>
-          ))}
+          {restaurant.cuisine.map((c) => {
+            const key = c.toLowerCase().replace(/\s+/g, '');
+            const translatedCuisine = t(`cuisines.${key}`) || c;
+            return (
+              <View key={c} style={[styles.tag, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.tagText, { color: colors.foreground }]}>{translatedCuisine}</Text>
+              </View>
+            );
+          })}
           <View style={[styles.tag, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.tagText, { color: colors.warning }]}>{priceLabel}</Text>
           </View>
@@ -253,7 +346,7 @@ export default function RestaurantDetailScreen() {
               <IconSymbol name="mappin.and.ellipse" size={18} color={colors.primary} />
             </View>
             <View style={styles.infoText}>
-              <Text style={[styles.infoLabel, { color: colors.muted }]}>Address</Text>
+              <Text style={[styles.infoLabel, { color: colors.muted }]}>{t('restaurant.address')}</Text>
               <Text style={[styles.infoValue, { color: colors.foreground }]}>{restaurant.address}</Text>
             </View>
           </View>
@@ -263,9 +356,9 @@ export default function RestaurantDetailScreen() {
               <IconSymbol name="location.fill" size={18} color={colors.primary} />
             </View>
             <View style={styles.infoText}>
-              <Text style={[styles.infoLabel, { color: colors.muted }]}>Distance</Text>
+              <Text style={[styles.infoLabel, { color: colors.muted }]}>{t('restaurant.distance')}</Text>
               <Text style={[styles.infoValue, { color: colors.foreground }]}>
-                {restaurant.distance.toFixed(1)} km away
+                {restaurant.distance.toFixed(1)} km {t('restaurant.away')}
               </Text>
             </View>
           </View>
@@ -276,18 +369,18 @@ export default function RestaurantDetailScreen() {
               <IconSymbol name="clock.fill" size={18} color={colors.primary} />
             </View>
             <View style={styles.infoText}>
-              <Text style={[styles.infoLabel, { color: colors.muted }]}>Hours</Text>
+              <Text style={[styles.infoLabel, { color: colors.muted }]}>{t('restaurant.hours')}</Text>
               {isLoadingDetails ? (
                 <ActivityIndicator size="small" color={colors.muted} style={{ alignSelf: "flex-start", marginTop: 4 }} />
-              ) : details?.weekdayText ? (
-                details.weekdayText.map((line, i) => (
+              ) : translatedHours ? (
+                translatedHours.map((line, i) => (
                   <Text key={i} style={[styles.infoValue, { color: colors.foreground, fontWeight: "400" }]}>
                     {line}
                   </Text>
                 ))
               ) : (
                 <Text style={[styles.infoValue, { color: colors.foreground }]}>
-                  {restaurant.isOpen ? "Open now" : "Closed"}
+                  {restaurant.isOpen ? t('deck.openNow') : t('deck.closed')}
                 </Text>
               )}
             </View>
@@ -295,13 +388,13 @@ export default function RestaurantDetailScreen() {
         </View>
 
         {/* Photos Grid */}
-        {allPhotos.length > 1 && (
+        {gridPhotos.length > 0 && (
           <>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <View style={styles.photosSection}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Photos</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{t('deck.photos')}</Text>
               <View style={styles.photoGrid}>
-                {allPhotos.slice(1).map((uri, i) => (
+                {gridPhotos.map((uri, i) => (
                   <Image
                     key={i}
                     source={{ uri }}
@@ -316,16 +409,16 @@ export default function RestaurantDetailScreen() {
         )}
 
         {/* Reviews */}
-        {(isLoadingDetails || (details?.reviews && details.reviews.length > 0)) && (
+        {!isDetailsError && (
           <>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <View style={styles.reviewsSection}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Reviews</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{t('restaurant.reviews')}</Text>
 
               {isLoadingDetails ? (
                 <ActivityIndicator color={colors.muted} style={{ marginTop: 12 }} />
-              ) : (
-                details?.reviews?.map((review, i) => (
+              ) : details?.reviews?.length ? (
+                details.reviews.map((review, i) => (
                   <View key={i} style={[styles.reviewCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <View style={styles.reviewHeader}>
                       <View style={[styles.reviewAvatar, { backgroundColor: colors.primary }]}>
@@ -354,11 +447,71 @@ export default function RestaurantDetailScreen() {
                     ) : null}
                   </View>
                 ))
+              ) : (
+                <Text style={[styles.reviewText, { color: colors.muted, marginTop: 8 }]}>
+                  No reviews available.
+                </Text>
               )}
             </View>
           </>
         )}
       </ScrollView>
+
+      {/* Share Modal */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowShareModal(false)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: colors.surface }]} onPress={() => {}}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Share Restaurant</Text>
+
+            {/* Card preview */}
+            {restaurant && (
+              <View style={styles.cardPreviewWrapper}>
+                <RestaurantShareCard ref={shareCardRef} restaurant={restaurant} />
+              </View>
+            )}
+
+            {/* Actions */}
+            <View style={styles.shareActions}>
+              <Pressable
+                onPress={handleShareImage}
+                disabled={isCapturing}
+                style={({ pressed }) => [
+                  styles.shareBtn,
+                  { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.8 },
+                  isCapturing && { opacity: 0.6 },
+                ]}
+              >
+                <IconSymbol name="photo" size={18} color="#fff" />
+                <Text style={styles.shareBtnText}>
+                  {isCapturing ? "Preparing…" : "Share Image"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleShareLink}
+                style={({ pressed }) => [
+                  styles.shareBtn,
+                  { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <IconSymbol name="link" size={18} color={colors.foreground} />
+                <Text style={[styles.shareBtnText, { color: colors.foreground }]}>Share Link</Text>
+              </Pressable>
+            </View>
+
+            <Pressable onPress={() => setShowShareModal(false)} style={styles.cancelBtn}>
+              <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Action Buttons */}
       <View
@@ -509,6 +662,56 @@ const styles = StyleSheet.create({
   reviewTime: { fontSize: 12, marginTop: 1 },
   reviewStars: { flexDirection: "row", gap: 1 },
   reviewText: { fontSize: 14, lineHeight: 20 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 32,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  cardPreviewWrapper: {
+    alignItems: "center",
+    borderRadius: 24,
+    overflow: "hidden",
+    // Scale down to fit the modal width nicely
+    transform: [{ scale: (SCREEN_WIDTH - 48) / SHARE_CARD_WIDTH }],
+    // Compensate for scale to avoid extra whitespace
+    marginVertical: -((SHARE_CARD_HEIGHT * (1 - (SCREEN_WIDTH - 48) / SHARE_CARD_WIDTH)) / 2),
+  },
+  shareActions: {
+    gap: 10,
+  },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  shareBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  cancelBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  cancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
   actionBar: {
     flexDirection: "row",
     gap: 16,

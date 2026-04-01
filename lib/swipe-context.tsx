@@ -10,6 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Restaurant, FilterState, LocationState, CuisineType, PriceLevel } from "./types";
 import { trpc } from "./trpc";
+import { useLanguage } from "../hooks/use-language";
 
 const LIKED_STORAGE_KEY = "@foodswipe_liked";
 
@@ -203,12 +204,13 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     isFetchingMore: false,
   });
 
+  const { currentLanguage } = useLanguage();
   const utils = trpc.useUtils();
 
   // Initial fetch via useQuery — re-runs whenever location changes
   const { data: nearbyData, isLoading: isFetchingRestaurants, error: trpcError } =
     trpc.places.nearbyRestaurants.useQuery(
-      { lat: state.location.lat, lng: state.location.lng, radius: 2000 },
+      { lat: state.location.lat, lng: state.location.lng, radius: 2000, language: currentLanguage as 'en' | 'es' | 'ja' | 'zh-HK' },
       { retry: false },
     );
 
@@ -261,6 +263,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
           lat,
           lng,
           radius,
+          language: currentLanguage as 'en' | 'es' | 'ja' | 'zh-HK',
           ...(pageToken ? { pageToken } : {}),
         });
 

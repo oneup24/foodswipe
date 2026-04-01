@@ -1,0 +1,112 @@
+{
+  "common": {
+    "liked": "Liked",
+    "discover": "Discover",
+    "profile": "Profile",
+    "settings": "Settings",
+    "language": "Language",
+    "english": "English",
+    "spanish": "Español",
+    "japanese": "日本語",
+    "chineseHK": "繁體中文",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "loading": "Loading...",
+    "error": "Error",
+    "tryAgain": "Try Again"
+  },
+  "deck": {
+    "openNow": "Open Now",
+    "closed": "Closed",
+    "findingMore": "Finding more restaurants...",
+    "noMore": "No more restaurants nearby",
+    "changeLocation": "Change Location",
+    "adjustFilters": "Adjust Filters",
+    "photos": "Photos"
+  },
+  "filters": {
+    "cuisine": "Cuisine",
+    "price": "Price",
+    "distance": "Distance",
+    "rating": "Rating",
+    "openNow": "Open Now",
+    "apply": "Apply Filters",
+    "reset": "Reset"
+  },
+  "cuisines": {
+    "chinese": "Chinese",
+    "italian": "Italian",
+    "japanese": "Japanese",
+    "korean": "Korean",
+    "thai": "Thai",
+    "indian": "Indian",
+    "mexican": "Mexican",
+    "american": "American",
+    "french": "French",
+    "spanish": "Spanish",
+    "portuguese": "Portuguese",
+    "vietnamese": "Vietnamese",
+    "burger": "Burger",
+    "pizza": "Pizza",
+    "sushi": "Sushi",
+    "seafood": "Seafood",
+    "vegetarian": "Vegetarian",
+    "vegan": "Vegan",
+    "fastfood": "Fast Food",
+    "cafe": "Cafe"
+  },
+  "priceLevel": {
+    "cheap": "$",
+    "moderate": "$$",
+    "expensive": "$$$",
+    "veryExpensive": "$$$$",
+    "budget": "Budget",
+    "moderateLabel": "Moderate",
+    "upscale": "Upscale",
+    "fineDining": "Fine Dining"
+  },
+  "restaurant": {
+    "call": "Call",
+    "directions": "Directions",
+    "website": "Website",
+    "reviews": "Reviews",
+    "hours": "Hours",
+    "address": "Address",
+    "distance": "Distance",
+    "phone": "Phone",
+    "like": "Like",
+    "unlike": "Unlike",
+    "share": "Share",
+    "description": "Description",
+    "away": "away"
+  },
+  "days": {
+    "monday": "Monday",
+    "tuesday": "Tuesday",
+    "wednesday": "Wednesday",
+    "thursday": "Thursday",
+    "friday": "Friday",
+    "saturday": "Saturday",
+    "sunday": "Sunday"
+  },
+  "time": {
+    "am": "AM",
+    "pm": "PM",
+    "monthsAgo": "months ago",
+    "yearsAgo": "years ago",
+    "daysAgo": "days ago",
+    "hoursAgo": "hours ago",
+    "minutesAgo": "minutes ago"
+  },
+  "buttons": {
+    "like": "LIKE",
+    "pass": "PASS",
+    "superLike": "SUPER LIKE"
+  }
+}

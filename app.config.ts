@@ -27,6 +27,24 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
+    infoPlist: {
+      NSLocationWhenInUseUsageDescription:
+        "FoodSwipe uses your location to find restaurants near you.",
+      NSLocationAlwaysAndWhenInUseUsageDescription:
+        "FoodSwipe uses your location to find restaurants near you.",
+    },
+    privacyManifests: {
+      NSPrivacyAccessedAPITypes: [
+        {
+          NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryUserDefaults",
+          NSPrivacyAccessedAPITypeReasons: ["CA92.1"],
+        },
+        {
+          NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryFileTimestamp",
+          NSPrivacyAccessedAPITypeReasons: ["C617.1"],
+        },
+      ],
+    },
   },
   android: {
     adaptiveIcon: {

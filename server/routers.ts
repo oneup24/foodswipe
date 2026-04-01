@@ -144,6 +144,70 @@ const CUISINE_MAP: Record<string, string> = {
   bakery: "Desserts",
 };
 
+const BRAND_MAP: Record<string, string> = {
+  // Fried chicken
+  "kfc": "Fried Chicken", "popeyes": "Fried Chicken", "chick-fil-a": "Fried Chicken",
+  "jollibee": "Fried Chicken", "church's": "Fried Chicken",
+  // Burgers
+  "mcdonald": "Burgers", "burger king": "Burgers", "wendy": "Burgers",
+  "five guys": "Burgers", "shake shack": "Burgers", "in-n-out": "Burgers",
+  "carl's jr": "Burgers", "hardee": "Burgers", "whataburger": "Burgers",
+  "smashburger": "Burgers", "fatburger": "Burgers",
+  // Pizza
+  "pizza hut": "Pizza", "domino": "Pizza", "papa john": "Pizza",
+  "little caesar": "Pizza", "papa murphy": "Pizza",
+  // Mexican
+  "taco bell": "Mexican", "chipotle": "Mexican", "qdoba": "Mexican",
+  "del taco": "Mexican", "moe's": "Mexican",
+  // Sandwiches / Subs
+  "subway": "Sandwiches", "jimmy john": "Sandwiches", "jersey mike": "Sandwiches",
+  "firehouse": "Sandwiches", "quizno": "Sandwiches", "potbelly": "Sandwiches",
+  // Coffee / Café
+  "starbucks": "Café", "costa coffee": "Café", "tim horton": "Café",
+  "dunkin": "Café", "peet": "Café", "caribou": "Café",
+  // Asian chains
+  "panda express": "Chinese", "pf chang": "Chinese",
+  "yoshinoya": "Japanese", "mos burger": "Japanese",
+  // Steakhouse
+  "outback": "Steakhouse", "sizzler": "Steakhouse", "texas de brazil": "Steakhouse",
+  "longhorn": "Steakhouse", "ruth's chris": "Steakhouse", "benihana": "Japanese",
+  // Desserts / Ice cream
+  "dairy queen": "Desserts", "baskin-robbins": "Desserts", "cold stone": "Desserts",
+  "haagen-dazs": "Desserts", "krispy kreme": "Desserts", "cinnabon": "Desserts",
+  // Other
+  "olive garden": "Italian", "red lobster": "Seafood",
+  "denny": "American", "ihop": "American", "waffle house": "American",
+  "cheesecake factory": "American", "applebee": "American", "chili's": "American",
+};
+
+function guessFromName(name: string): string | null {
+  const n = name.toLowerCase();
+
+  // Check brand map first (exact substring match)
+  for (const [brand, cuisine] of Object.entries(BRAND_MAP)) {
+    if (n.includes(brand)) return cuisine;
+  }
+
+  if (/sushi|ramen|izakaya|tempura|yakitori|teppanyaki|udon|soba|tonkatsu|wagyu|kaiseki|bento|donburi|gyoza|takoyaki|japanese|sakura|tokyo|osaka|kyoto/.test(n)) return "Japanese";
+  if (/dim.?sum|wonton|dumpling|congee|peking|szechuan|sichuan|cantonese|shanghainese|chinese|hongkong|hong.?kong|malatang|hot.?pot|xiaolongbao/.test(n)) return "Chinese";
+  if (/korean|bulgogi|bibimbap|kimchi|galbi|jjigae|kbbq/.test(n)) return "Korean";
+  if (/\bthai\b|pad.?thai|tom.?yum|green.?curry|thai.?basil|satay/.test(n)) return "Thai";
+  if (/\bpho\b|vietnamese|viet\b|banh.?mi|bun bo|saigon|hanoi/.test(n)) return "Vietnamese";
+  if (/\bindian\b|curry|tandoor|masala|biryani|\bnaan\b|tikka|punjabi|dosa|samosa/.test(n)) return "Indian";
+  if (/pizza|pasta|ristorante|trattoria|osteria|gelato|pizzeria|napoli|italian|cannoli/.test(n)) return "Italian";
+  if (/\btaco\b|burrito|mexican|quesadilla|enchilada|guacamole|cantina|taqueria/.test(n)) return "Mexican";
+  if (/\bburger\b|steakhouse|smokehouse|barbecue|\bbbq\b|wings|fried.?chicken/.test(n)) return "American";
+  if (/french|brasserie|bistro|cr[eê]pe|boulangerie|p[aâ]tisserie|\bparis\b/.test(n)) return "French";
+  if (/mediterranean|greek|hummus|falafel|kebab|shawarma|gyros|lebanese|turkish|mezze/.test(n)) return "Mediterranean";
+  if (/seafood|oyster|lobster|\bcrab\b|\bfish\b|\bprawn\b|sashimi/.test(n)) return "Seafood";
+  if (/dessert|patisserie|waffle|ice.?cream|creamery|frozen.?yogurt/.test(n)) return "Desserts";
+  if (/\bcafe\b|coffee|espresso|\bbrew\b|roaster/.test(n)) return "Café";
+  if (/\bbakery\b|boulangerie|bread|pastry/.test(n)) return "Bakery";
+  if (/noodle|ramen|udon|soba/.test(n)) return "Noodles";
+  if (/fast.?food|quick.?serve/.test(n)) return "Fast Food";
+  return null;
+}
+
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -221,44 +285,49 @@ export const appRouter = router({
         const reqHost = ctx.req.headers.host ?? "localhost:3000";
         const serverBase = `${reqProto}://${reqHost}`;
 
-        const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
-        url.searchParams.set("place_id", input.placeId);
-        url.searchParams.set("fields", "formatted_phone_number,website,opening_hours,reviews,photos");
-        url.searchParams.set("key", ENV.googlePlacesApiKey);
+        // New Places API v1 — reviews include originalText (original language, no forced translation)
+        const res = await fetch(
+          `https://places.googleapis.com/v1/places/${input.placeId}`,
+          {
+            headers: {
+              "X-Goog-Api-Key": ENV.googlePlacesApiKey,
+              "X-Goog-FieldMask": "formattedPhoneNumber,websiteUri,regularOpeningHours,reviews,photos",
+            },
+          }
+        );
+        if (!res.ok) throw new Error("Places API v1 details request failed");
 
-        const res = await fetch(url.toString());
-        if (!res.ok) throw new Error("Google Places details request failed");
-        const data = await res.json() as {
-          result: {
-            formatted_phone_number?: string;
-            website?: string;
-            opening_hours?: { weekday_text?: string[] };
-            photos?: { photo_reference: string }[];
-            reviews?: {
-              author_name: string;
-              rating: number;
-              text: string;
-              relative_time_description: string;
-              profile_photo_url?: string;
-            }[];
-          };
+        type NewPlaceDetail = {
+          formattedPhoneNumber?: string;
+          websiteUri?: string;
+          regularOpeningHours?: { weekdayDescriptions?: string[] };
+          photos?: { name: string }[];
+          reviews?: {
+            relativePublishTimeDescription: string;
+            rating: number;
+            text?: { text: string };
+            originalText?: { text: string };
+            authorAttribution: { displayName: string; photoUri?: string };
+          }[];
         };
+        const data = await res.json() as NewPlaceDetail;
 
-        const detailPhotos = (data.result?.photos ?? []).map(
-          (p) => `${serverBase}/api/places/photo?ref=${encodeURIComponent(p.photo_reference)}`
+        const detailPhotos = (data.photos ?? []).map(
+          (p) => `${serverBase}/api/places/photo?ref=${encodeURIComponent(p.name)}`
         );
 
         return {
-          phone: data.result?.formatted_phone_number ?? null,
-          website: data.result?.website ?? null,
-          weekdayText: data.result?.opening_hours?.weekday_text ?? null,
+          phone: data.formattedPhoneNumber ?? null,
+          website: data.websiteUri ?? null,
+          weekdayText: data.regularOpeningHours?.weekdayDescriptions ?? null,
           photos: detailPhotos,
-          reviews: (data.result?.reviews ?? []).map((r) => ({
-            author: r.author_name,
+          reviews: (data.reviews ?? []).map((r) => ({
+            author: r.authorAttribution.displayName,
             rating: r.rating,
-            text: r.text,
-            time: r.relative_time_description,
-            avatar: r.profile_photo_url ?? null,
+            // Prefer originalText so reviews show in the language they were written
+            text: r.originalText?.text ?? r.text?.text ?? "",
+            time: r.relativePublishTimeDescription,
+            avatar: r.authorAttribution.photoUri ?? null,
           })),
         };
       }),
@@ -269,105 +338,129 @@ export const appRouter = router({
         lng: z.number(),
         radius: z.number().default(2000),
         pageToken: z.string().optional(),
+        language: z.enum(['en', 'es', 'ja', 'zh-HK']).default('en'),
       }))
       .query(async ({ input, ctx }) => {
         const reqProto = (ctx.req.headers["x-forwarded-proto"] as string) || (ctx.req.socket && (ctx.req.socket as any).encrypted ? "https" : "http");
         const reqHost = ctx.req.headers.host ?? "localhost:3000";
         const serverBase = `${reqProto}://${reqHost}`;
 
-        const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-        if (input.pageToken) {
-          // Page token encodes all prior search params; only key is needed alongside it
-          url.searchParams.set("pagetoken", input.pageToken);
-        } else {
-          url.searchParams.set("location", `${input.lat},${input.lng}`);
-          url.searchParams.set("radius", String(input.radius));
-          url.searchParams.set("type", "restaurant");
-        }
-        url.searchParams.set("key", ENV.googlePlacesApiKey);
-
-        type GPlace = {
-          place_id: string;
-          name: string;
-          vicinity: string;
-          geometry: { location: { lat: number; lng: number } };
-          rating?: number;
-          user_ratings_total?: number;
-          price_level?: number;
-          opening_hours?: { open_now: boolean };
-          photos?: { photo_reference: string; height: number; width: number }[];
+        type NewGPlace = {
+          id: string;
+          displayName: { text: string };
           types: string[];
+          rating?: number;
+          userRatingCount?: number;
+          priceLevel?: string;
+          currentOpeningHours?: { openNow: boolean };
+          photos?: { name: string; widthPx: number; heightPx: number }[];
+          shortFormattedAddress?: string;
+          formattedAddress?: string;
+          location: { latitude: number; longitude: number };
         };
-        type PlacesResponse = { results: GPlace[]; next_page_token?: string; status: string };
 
-        // Page tokens need ~2s to activate; retry once on INVALID_REQUEST
-        let data: PlacesResponse = { results: [], status: "UNKNOWN" };
-        for (let attempt = 0; attempt < 2; attempt++) {
-          const res = await fetch(url.toString());
-          if (!res.ok) throw new Error("Google Places Nearby Search failed");
-          data = await res.json() as PlacesResponse;
-          if (data.status !== "INVALID_REQUEST") break;
-          await new Promise((r) => setTimeout(r, 2000));
-        }
+        const PRICE_LEVEL_MAP: Record<string, number> = {
+          PRICE_LEVEL_FREE: 1,
+          PRICE_LEVEL_INEXPENSIVE: 1,
+          PRICE_LEVEL_MODERATE: 2,
+          PRICE_LEVEL_EXPENSIVE: 3,
+          PRICE_LEVEL_VERY_EXPENSIVE: 4,
+        };
 
-        const restaurants = await Promise.all(data.results.map(async (place) => {
-          const cuisines = place.types
+        // Language code mapping for Google API
+        const langCodeMap: Record<string, string> = {
+          'en': 'en',
+          'es': 'es',
+          'ja': 'ja',
+          'zh-HK': 'zh-TW', // Google uses zh-TW for Traditional Chinese
+        };
+
+        // New Places API v1 — returns photos in Google's editorial order (特色/featured first)
+        const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": ENV.googlePlacesApiKey,
+            "X-Goog-FieldMask": "places.id,places.displayName,places.types,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours,places.photos,places.shortFormattedAddress,places.formattedAddress,places.location",
+          },
+          body: JSON.stringify({
+            locationRestriction: {
+              circle: { center: { latitude: input.lat, longitude: input.lng }, radius: input.radius },
+            },
+            includedTypes: ["restaurant"],
+            maxResultCount: 20,
+            pageToken: input.pageToken,
+            languageCode: langCodeMap[input.language],
+          }),
+        });
+        if (!res.ok) throw new Error("Places API v1 nearby search failed");
+        const data = await res.json() as { places?: NewGPlace[] };
+        const places = data.places ?? [];
+
+        const restaurants = await Promise.all(places.map(async (place) => {
+          const cuisines = (place.types ?? [])
             .map((t) => CUISINE_MAP[t])
             .filter((c): c is string => !!c);
+          if (cuisines.length === 0) {
+            const guessed = guessFromName(place.displayName?.text ?? "");
+            if (guessed) cuisines.push(guessed);
+          }
 
-          // Sort portrait/square photos first (food shots) before wide landscape (interiors)
-          const sortedPhotos = [...(place.photos ?? [])].sort((a, b) => {
-            const ratioA = a.width / (a.height || 1);
-            const ratioB = b.width / (b.height || 1);
-            return ratioA - ratioB;
-          });
-          const googlePhotos = sortedPhotos.map(
-            (p) => `${serverBase}/api/places/photo?ref=${encodeURIComponent(p.photo_reference)}`
+          // New API returns photos in editorial order — 特色 photos come first
+          const placePhotos = place.photos ?? [];
+          let photos = placePhotos.map(
+            (p) => `${serverBase}/api/places/photo?ref=${encodeURIComponent(p.name)}`
           );
 
-          // If best available photo is still landscape (ratio > 1.1), search for a real food image
-          const bestRatio = sortedPhotos[0] ? sortedPhotos[0].width / (sortedPhotos[0].height || 1) : 2;
-          let photos = googlePhotos.length ? googlePhotos : [];
-          if (bestRatio > 1.1) {
-            const cached = foodImageCache.get(place.place_id);
+          // If all photos are landscape (storefront/interior), try Serper for a real food image
+          const hasPortrait = placePhotos.some((p) => p.widthPx / (p.heightPx || 1) <= 1.3);
+          if (!hasPortrait) {
+            const cached = foodImageCache.get(place.id);
             if (cached) {
               photos = [cached, ...photos];
             } else {
               const foodImage = await searchFoodImage(
-                place.name,
+                place.displayName?.text ?? "",
                 cuisines[0] ?? "food",
                 ENV.serperApiKey,
-                place.geometry.location.lat,
-                place.geometry.location.lng
+                place.location.latitude,
+                place.location.longitude
               );
               if (foodImage) {
-                foodImageCache.set(place.place_id, foodImage);
+                foodImageCache.set(place.id, foodImage);
                 saveCache(foodImageCache);
                 photos = [foodImage, ...photos];
               }
             }
           }
           if (!photos.length) photos = ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800"];
-          const imageUrl = photos[0];
+
+          // Randomly pick hero from the first 3 editorial photos
+          const poolSize = Math.min(3, photos.length);
+          const imageUrl = photos[Math.floor(Math.random() * poolSize)];
 
           return {
-            id: place.place_id,
-            name: place.name,
+            id: place.id,
+            name: place.displayName?.text ?? "",
+            nameLocalized: {
+              [input.language]: place.displayName?.text ?? "",
+            },
             cuisine: cuisines as string[],
             rating: place.rating ?? 4.0,
-            reviewCount: place.user_ratings_total ?? 0,
-            priceLevel: (Math.max(1, Math.min(4, place.price_level ?? 2))) as 1 | 2 | 3 | 4,
-            distance: Math.round(haversineKm(input.lat, input.lng, place.geometry.location.lat, place.geometry.location.lng) * 10) / 10,
+            reviewCount: place.userRatingCount ?? 0,
+            priceLevel: Math.max(1, Math.min(4, PRICE_LEVEL_MAP[place.priceLevel ?? ""] ?? 2)) as 1 | 2 | 3 | 4,
+            distance: Math.round(haversineKm(input.lat, input.lng, place.location.latitude, place.location.longitude) * 10) / 10,
             imageUrl,
             photos,
-            address: place.vicinity,
-            isOpen: place.opening_hours?.open_now ?? true,
-            lat: place.geometry.location.lat,
-            lng: place.geometry.location.lng,
+            address: place.shortFormattedAddress ?? place.formattedAddress ?? "",
+            isOpen: place.currentOpeningHours?.openNow ?? true,
+            lat: place.location.latitude,
+            lng: place.location.longitude,
           };
         }));
 
-        return { restaurants, nextPageToken: data.next_page_token ?? null };
+        // New API doesn't use page tokens; fetchMoreRestaurants handles pagination via random offsets
+        return { restaurants, nextPageToken: null };
       }),
   }),
 });

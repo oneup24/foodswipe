@@ -1,0 +1,112 @@
+{
+  "common": {
+    "liked": "已儲存",
+    "discover": "探索",
+    "profile": "個人資料",
+    "settings": "設定",
+    "language": "語言",
+    "english": "English",
+    "spanish": "Español",
+    "japanese": "日本語",
+    "chineseHK": "繁體中文",
+    "ok": "確定",
+    "cancel": "取消",
+    "save": "儲存",
+    "delete": "刪除",
+    "close": "關閉",
+    "back": "返回",
+    "next": "下一個",
+    "previous": "上一個",
+    "loading": "載入中...",
+    "error": "錯誤",
+    "tryAgain": "重試"
+  },
+  "deck": {
+    "openNow": "現在營業",
+    "closed": "已關閉",
+    "findingMore": "正在尋找更多餐廳...",
+    "noMore": "附近沒有更多餐廳",
+    "changeLocation": "變更位置",
+    "adjustFilters": "調整篩選器",
+    "photos": "相片"
+  },
+  "filters": {
+    "cuisine": "菜系",
+    "price": "價格",
+    "distance": "距離",
+    "rating": "評分",
+    "openNow": "現在營業",
+    "apply": "套用篩選器",
+    "reset": "重設"
+  },
+  "cuisines": {
+    "chinese": "中菜",
+    "italian": "意大利菜",
+    "japanese": "日菜",
+    "korean": "韓菜",
+    "thai": "泰菜",
+    "indian": "印度菜",
+    "mexican": "墨西哥菜",
+    "american": "美式",
+    "french": "法菜",
+    "spanish": "西班牙菜",
+    "portuguese": "葡萄牙菜",
+    "vietnamese": "越南菜",
+    "burger": "漢堡",
+    "pizza": "披薩",
+    "sushi": "壽司",
+    "seafood": "海鮮",
+    "vegetarian": "素食",
+    "vegan": "純素",
+    "fastfood": "快餐",
+    "cafe": "咖啡館"
+  },
+  "priceLevel": {
+    "cheap": "$",
+    "moderate": "$$",
+    "expensive": "$$$",
+    "veryExpensive": "$$$$",
+    "budget": "平價",
+    "moderateLabel": "中等",
+    "upscale": "高級",
+    "fineDining": "米芝蓮級"
+  },
+  "restaurant": {
+    "call": "打電話",
+    "directions": "路線",
+    "website": "網站",
+    "reviews": "評論",
+    "hours": "營業時間",
+    "address": "地址",
+    "distance": "距離",
+    "phone": "電話",
+    "like": "喜歡",
+    "unlike": "不喜歡",
+    "share": "分享",
+    "description": "描述",
+    "away": "遠"
+  },
+  "days": {
+    "monday": "星期一",
+    "tuesday": "星期二",
+    "wednesday": "星期三",
+    "thursday": "星期四",
+    "friday": "星期五",
+    "saturday": "星期六",
+    "sunday": "星期日"
+  },
+  "time": {
+    "am": "上午",
+    "pm": "下午",
+    "monthsAgo": "個月前",
+    "yearsAgo": "年前",
+    "daysAgo": "天前",
+    "hoursAgo": "小時前",
+    "minutesAgo": "分鐘前"
+  },
+  "buttons": {
+    "like": "喜歡",
+    "pass": "跳過",
+    "superLike": "非常喜歡"
+  }
+}

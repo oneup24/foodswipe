@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,13 +13,13 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  runOnJS,
   interpolate,
   Extrapolation,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { Restaurant } from "@/lib/types";
 import { useColors } from "@/hooks/use-colors";
+import { useLanguage } from "@/hooks/use-language";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
@@ -58,11 +58,27 @@ export function SwipeCard({
   index,
 }: Props) {
   const colors = useColors();
+  const { t, currentLanguage } = useLanguage();
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(isTop ? 1 : 0.95 - index * 0.02);
 
-  const photos = restaurant.photos?.length ? restaurant.photos : [restaurant.imageUrl];
+  const shuffleArray = <T,>(arr: T[]): T[] => {
+    const shuffled = [...arr];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
+  const photos = useMemo(
+    () =>
+      shuffleArray(
+        restaurant.photos?.length ? restaurant.photos : [restaurant.imageUrl]
+      ),
+    [restaurant.id, restaurant.photos]
+  );
   const [photoIndex, setPhotoIndex] = useState(0);
   const photoIndexRef = useRef(0);
 
@@ -99,6 +115,8 @@ export function SwipeCard({
 
   const gesture = Gesture.Pan()
     .runOnJS(true)
+    .activeOffsetX([-8, 8])
+    .activeOffsetY([-8, 8])
     .onUpdate((event) => {
       if (!isTop) return;
       translateX.value = event.translationX;
@@ -111,21 +129,21 @@ export function SwipeCard({
       // Swipe up = super like
       if (translationY < SWIPE_UP_THRESHOLD && Math.abs(translationX) < 80) {
         translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 300 });
-        runOnJS(handleSwipeUp)();
+        handleSwipeUp();
         return;
       }
 
       // Swipe right = like
       if (translationX > SWIPE_THRESHOLD || velocityX > 800) {
         translateX.value = withTiming(SCREEN_WIDTH * 1.5, { duration: 300 });
-        runOnJS(handleSwipeRight)();
+        handleSwipeRight();
         return;
       }
 
       // Swipe left = pass
       if (translationX < -SWIPE_THRESHOLD || velocityX < -800) {
         translateX.value = withTiming(-SCREEN_WIDTH * 1.5, { duration: 300 });
-        runOnJS(handleSwipeLeft)();
+        handleSwipeLeft();
         return;
       }
 
@@ -141,15 +159,15 @@ export function SwipeCard({
       if (!isTop) return;
       if (photos.length > 1) {
         if (event.x < CARD_WIDTH * 0.33) {
-          runOnJS(goPrevPhoto)();
+          goPrevPhoto();
           return;
         }
         if (event.x > CARD_WIDTH * 0.67) {
-          runOnJS(goNextPhoto)();
+          goNextPhoto();
           return;
         }
       }
-      runOnJS(handlePress)();
+      handlePress();
     });
 
   const composedGesture = Gesture.Simultaneous(gesture, tapGesture);
@@ -216,6 +234,24 @@ export function SwipeCard({
           transition={200}
         />
 
+        {/* Carousel Arrows */}
+        {photos.length > 1 && (
+          <>
+            {/* Left Arrow */}
+            {photoIndex > 0 && (
+              <View style={[styles.arrow, styles.arrowLeft]}>
+                <Text style={styles.arrowText}>‹</Text>
+              </View>
+            )}
+            {/* Right Arrow */}
+            {photoIndex < photos.length - 1 && (
+              <View style={[styles.arrow, styles.arrowRight]}>
+                <Text style={styles.arrowText}>›</Text>
+              </View>
+            )}
+          </>
+        )}
+
         {/* Photo dots */}
         {photos.length > 1 && (
           <View style={styles.dotsRow}>
@@ -261,21 +297,27 @@ export function SwipeCard({
               ]}
             >
               <Text style={styles.openBadgeText}>
-                {restaurant.isOpen ? "Open Now" : "Closed"}
+                {restaurant.isOpen ? t('deck.openNow') : t('deck.closed')}
               </Text>
             </View>
           </View>
 
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
-              {restaurant.name}
+              {restaurant.nameLocalized?.[currentLanguage] || restaurant.name}
             </Text>
             <Text style={styles.price}>{priceString}</Text>
           </View>
 
           <View style={styles.metaRow}>
             <Text style={styles.cuisine}>
-              {restaurant.cuisine.slice(0, 2).join(" · ") || "Restaurant"}
+              {restaurant.cuisine
+                .slice(0, 2)
+                .map((c) => {
+                  const key = c.toLowerCase().replace(/\s+/g, '');
+                  return t(`cuisines.${key}`) || c;
+                })
+                .join(" · ") || t('restaurant.description')}
             </Text>
             <Text style={styles.dot}>·</Text>
             <Text style={styles.distance}>{restaurant.distance.toFixed(1)} km</Text>
@@ -454,5 +496,28 @@ const styles = StyleSheet.create({
   reviewCount: {
     color: "rgba(255,255,255,0.7)",
     fontSize: 12,
+  },
+  arrow: {
+    position: "absolute",
+    top: "50%",
+    transform: [{ translateY: -20 }],
+    backgroundColor: "rgba(255,255,255,0.7)",
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  arrowLeft: {
+    left: 12,
+  },
+  arrowRight: {
+    right: 12,
+  },
+  arrowText: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#000",
   },
 });

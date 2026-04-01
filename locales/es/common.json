@@ -1,0 +1,112 @@
+{
+  "common": {
+    "liked": "Guardados",
+    "discover": "Descubrir",
+    "profile": "Perfil",
+    "settings": "Configuración",
+    "language": "Idioma",
+    "english": "English",
+    "spanish": "Español",
+    "japanese": "日本語",
+    "chineseHK": "繁體中文",
+    "ok": "OK",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "close": "Cerrar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "loading": "Cargando...",
+    "error": "Error",
+    "tryAgain": "Intentar de nuevo"
+  },
+  "deck": {
+    "openNow": "Abierto ahora",
+    "closed": "Cerrado",
+    "findingMore": "Buscando más restaurantes...",
+    "noMore": "No hay más restaurantes cerca",
+    "changeLocation": "Cambiar ubicación",
+    "adjustFilters": "Ajustar filtros",
+    "photos": "Fotos"
+  },
+  "filters": {
+    "cuisine": "Cocina",
+    "price": "Precio",
+    "distance": "Distancia",
+    "rating": "Calificación",
+    "openNow": "Abierto ahora",
+    "apply": "Aplicar filtros",
+    "reset": "Reiniciar"
+  },
+  "cuisines": {
+    "chinese": "Chino",
+    "italian": "Italiano",
+    "japanese": "Japonés",
+    "korean": "Coreano",
+    "thai": "Tailandés",
+    "indian": "Indio",
+    "mexican": "Mexicano",
+    "american": "Americano",
+    "french": "Francés",
+    "spanish": "Español",
+    "portuguese": "Portugués",
+    "vietnamese": "Vietnamita",
+    "burger": "Hamburguesa",
+    "pizza": "Pizza",
+    "sushi": "Sushi",
+    "seafood": "Mariscos",
+    "vegetarian": "Vegetariano",
+    "vegan": "Vegano",
+    "fastfood": "Comida rápida",
+    "cafe": "Café"
+  },
+  "priceLevel": {
+    "cheap": "$",
+    "moderate": "$$",
+    "expensive": "$$$",
+    "veryExpensive": "$$$$",
+    "budget": "Presupuesto",
+    "moderateLabel": "Moderado",
+    "upscale": "Elegante",
+    "fineDining": "Alta Cocina"
+  },
+  "restaurant": {
+    "call": "Llamar",
+    "directions": "Direcciones",
+    "website": "Sitio web",
+    "reviews": "Reseñas",
+    "hours": "Horario",
+    "address": "Dirección",
+    "distance": "Distancia",
+    "phone": "Teléfono",
+    "like": "Me gusta",
+    "unlike": "No me gusta",
+    "share": "Compartir",
+    "description": "Descripción",
+    "away": "de distancia"
+  },
+  "days": {
+    "monday": "Lunes",
+    "tuesday": "Martes",
+    "wednesday": "Miércoles",
+    "thursday": "Jueves",
+    "friday": "Viernes",
+    "saturday": "Sábado",
+    "sunday": "Domingo"
+  },
+  "time": {
+    "am": "AM",
+    "pm": "PM",
+    "monthsAgo": "hace meses",
+    "yearsAgo": "hace años",
+    "daysAgo": "hace días",
+    "hoursAgo": "hace horas",
+    "minutesAgo": "hace minutos"
+  },
+  "buttons": {
+    "like": "ME GUSTA",
+    "pass": "PASAR",
+    "superLike": "ME ENCANTA"
+  }
+}

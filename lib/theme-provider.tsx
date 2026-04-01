@@ -1,12 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Appearance, View, useColorScheme as useSystemColorScheme } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { SchemeColors, type ColorScheme } from "@/constants/theme";
+
+const THEME_STORAGE_KEY = "@foodswipe_theme";
 
 type ThemeContextValue = {
   colorScheme: ColorScheme;
   setColorScheme: (scheme: ColorScheme) => void;
+  toggleColorScheme: () => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -14,6 +18,24 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useSystemColorScheme() ?? "light";
   const [colorScheme, setColorSchemeState] = useState<ColorScheme>(systemScheme);
+  const [userOverride, setUserOverride] = useState<boolean>(false);
+
+  // Load persisted preference on mount
+  useEffect(() => {
+    AsyncStorage.getItem(THEME_STORAGE_KEY).then((val) => {
+      if (val === "dark" || val === "light") {
+        setUserOverride(true);
+        setColorSchemeState(val);
+      }
+    });
+  }, []);
+
+  // Follow system scheme when user hasn't manually set a preference
+  useEffect(() => {
+    if (!userOverride) {
+      setColorSchemeState(systemScheme);
+    }
+  }, [systemScheme, userOverride]);
 
   const applyScheme = useCallback((scheme: ColorScheme) => {
     nativewindColorScheme.set(scheme);
@@ -31,8 +53,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setColorScheme = useCallback((scheme: ColorScheme) => {
     setColorSchemeState(scheme);
+    setUserOverride(true);
     applyScheme(scheme);
+    AsyncStorage.setItem(THEME_STORAGE_KEY, scheme);
   }, [applyScheme]);
+
+  const toggleColorScheme = useCallback(() => {
+    setColorScheme(colorScheme === "dark" ? "light" : "dark");
+  }, [colorScheme, setColorScheme]);
 
   useEffect(() => {
     applyScheme(colorScheme);
@@ -58,10 +86,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     () => ({
       colorScheme,
       setColorScheme,
+      toggleColorScheme,
     }),
-    [colorScheme, setColorScheme],
+    [colorScheme, setColorScheme, toggleColorScheme],
   );
-  console.log(value, themeVariables)
 
   return (
     <ThemeContext.Provider value={value}>

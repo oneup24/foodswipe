@@ -21,6 +21,9 @@ import { SwipeCard } from "@/components/swipe-card";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
+import { useThemeContext } from "@/lib/theme-provider";
+import { useLanguage } from "@/hooks/use-language";
+import { SettingsModal } from "@/components/settings-modal";
 import { Restaurant } from "@/lib/types";
 import { useInterstitialAd, useRewardedAd, AD_UNITS } from "@/lib/ads";
 
@@ -30,9 +33,10 @@ const CARD_WIDTH = SCREEN_WIDTH - 32;
 export default function DiscoverScreen() {
   const { state, swipeRight, swipeLeft, swipeUp, resetStack } = useSwipe();
   const colors = useColors();
+  const { colorScheme, toggleColorScheme } = useThemeContext();
   const router = useRouter();
-  const [showFilters, setShowFilters] = useState(false);
   const swipeCountRef = useRef(0);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Ads
   const {
@@ -156,6 +160,20 @@ export default function DiscoverScreen() {
     maybeShowInterstitial();
   }, [state.cardStack, swipeUp, showToast, maybeShowInterstitial]);
 
+  // Keyboard shortcuts on web (← pass, → like, ↑ super like)
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (state.cardStack.length === 0) return;
+      const top = state.cardStack[0];
+      if (e.key === "ArrowRight") { handleSwipeRight(top); }
+      else if (e.key === "ArrowLeft") { handleSwipeLeft(); }
+      else if (e.key === "ArrowUp") { handleSwipeUp(top); }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [state.cardStack, handleSwipeRight, handleSwipeLeft, handleSwipeUp]);
+
   const visibleCards = state.cardStack.slice(0, 4);
   const { isFetchingMore } = state;
 
@@ -185,24 +203,55 @@ export default function DiscoverScreen() {
         {/* App Title */}
         <Text style={[styles.appTitle, { color: colors.primary }]}>FoodSwipe</Text>
 
-        {/* Filter Button */}
-        <Pressable
-          onPress={() => router.push("/filters")}
-          style={({ pressed }) => [
-            styles.filterButton,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <IconSymbol name="slider.horizontal.3" size={20} color={colors.foreground} />
-          {(state.filters.cuisines.length > 0 ||
-            state.filters.priceRange.length > 0 ||
-            state.filters.openNow ||
-            state.filters.minRating > 0 ||
-            state.filters.maxDistance < 10) && (
-            <View style={[styles.filterDot, { backgroundColor: colors.primary }]} />
-          )}
-        </Pressable>
+        {/* Right buttons */}
+        <View style={styles.headerRight}>
+          {/* Dark mode toggle */}
+          <Pressable
+            onPress={toggleColorScheme}
+            style={({ pressed }) => [
+              styles.filterButton,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <IconSymbol
+              name={colorScheme === "dark" ? "sun.max.fill" : "moon.fill"}
+              size={18}
+              color={colors.foreground}
+            />
+          </Pressable>
+
+          {/* Settings Button */}
+          <Pressable
+            onPress={() => setShowSettings(true)}
+            style={({ pressed }) => [
+              styles.filterButton,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <IconSymbol name="gearshape.fill" size={18} color={colors.foreground} />
+          </Pressable>
+
+          {/* Filter Button */}
+          <Pressable
+            onPress={() => router.push("/filters")}
+            style={({ pressed }) => [
+              styles.filterButton,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <IconSymbol name="slider.horizontal.3" size={20} color={colors.foreground} />
+            {(state.filters.cuisines.length > 0 ||
+              state.filters.priceRange.length > 0 ||
+              state.filters.openNow ||
+              state.filters.minRating > 0 ||
+              state.filters.maxDistance < 10) && (
+              <View style={[styles.filterDot, { backgroundColor: colors.primary }]} />
+            )}
+          </Pressable>
+        </View>
       </View>
 
       {/* Card Stack Area */}
@@ -326,6 +375,9 @@ export default function DiscoverScreen() {
       <Animated.View style={[styles.toast, toastStyle]}>
         <Text style={styles.toastText}>{toastMessage}</Text>
       </Animated.View>
+
+      {/* Settings Modal */}
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
     </ScreenContainer>
   );
 }
@@ -358,6 +410,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
     letterSpacing: -0.5,
+  },
+  headerRight: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
   },
   filterButton: {
     width: 40,

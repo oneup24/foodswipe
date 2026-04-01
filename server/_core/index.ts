@@ -166,10 +166,13 @@ async function startServer() {
       return;
     }
 
-    const url = new URL("https://maps.googleapis.com/maps/api/place/photo");
-    url.searchParams.set("maxwidth", "800");
-    url.searchParams.set("photo_reference", ref);
-    url.searchParams.set("key", process.env.GOOGLE_PLACES_API_KEY ?? "");
+    // New Places API v1: ref looks like "places/ChIJ.../photos/AUc..."
+    // Old Places API:    ref is a base64-like photo_reference string
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
+    const photoUrl = ref.startsWith("places/")
+      ? `https://places.googleapis.com/v1/${ref}/media?maxWidthPx=800&key=${apiKey}`
+      : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${encodeURIComponent(ref)}&key=${apiKey}`;
+    const url = new URL(photoUrl);
     try {
       const upstream = await fetch(url.toString());
       res.status(upstream.status);

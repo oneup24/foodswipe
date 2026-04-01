@@ -17,6 +17,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
+import { useLanguage } from "@/hooks/use-language";
 import { Restaurant } from "@/lib/types";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -33,14 +34,16 @@ function RestaurantCard({
   onUnlike: (id: string) => void;
 }) {
   const colors = useColors();
+  const { t, currentLanguage } = useLanguage();
 
   const handleLongPress = useCallback(() => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    const displayName = restaurant.nameLocalized?.[currentLanguage] || restaurant.name;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`;
     Alert.alert(
-      restaurant.name,
+      displayName,
       `${restaurant.cuisine[0] ?? "Restaurant"} · ${"$".repeat(restaurant.priceLevel)} · ${restaurant.rating}/5`,
       [
         { text: "Cancel", style: "cancel" },
@@ -48,8 +51,8 @@ function RestaurantCard({
           text: "Share",
           onPress: () =>
             Share.share({
-              title: restaurant.name,
-              message: `${restaurant.name}\n${restaurant.cuisine.join(" · ")} · ${"$".repeat(restaurant.priceLevel)}\nRating: ${restaurant.rating}/5 · ${restaurant.distance.toFixed(1)}km away\n${restaurant.address}\n\n${mapsUrl}`,
+              title: displayName,
+              message: `${displayName}\n${restaurant.cuisine.join(" · ")} · ${"$".repeat(restaurant.priceLevel)}\nRating: ${restaurant.rating}/5 · ${restaurant.distance.toFixed(1)}km away\n${restaurant.address}\n\n${mapsUrl}`,
             }),
         },
         {
@@ -59,7 +62,7 @@ function RestaurantCard({
         },
       ]
     );
-  }, [restaurant, onUnlike]);
+  }, [restaurant, onUnlike, currentLanguage]);
 
   return (
     <Pressable
@@ -83,10 +86,13 @@ function RestaurantCard({
       <View style={styles.cardOverlay} />
       <View style={styles.cardInfo}>
         <Text style={styles.cardName} numberOfLines={1}>
-          {restaurant.name}
+          {restaurant.nameLocalized?.[currentLanguage] || restaurant.name}
         </Text>
         <Text style={styles.cardCuisine} numberOfLines={1}>
-          {restaurant.cuisine[0]}
+          {(() => {
+            const key = restaurant.cuisine[0]?.toLowerCase().replace(/\s+/g, '');
+            return t(`cuisines.${key}`) || restaurant.cuisine[0];
+          })()}
         </Text>
         <View style={styles.cardMeta}>
           <Text style={styles.cardStar}>★</Text>
@@ -109,6 +115,7 @@ function RestaurantCard({
 export default function LikedScreen() {
   const { state, unlike } = useSwipe();
   const colors = useColors();
+  const { t } = useLanguage();
   const router = useRouter();
 
   const handlePrivacy = useCallback(() => {
@@ -149,7 +156,7 @@ export default function LikedScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View style={styles.headerLeft}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            Liked
+            {t('common.liked')}
           </Text>
           {state.likedRestaurants.length > 0 && (
             <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>

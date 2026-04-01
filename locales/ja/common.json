@@ -1,0 +1,112 @@
+{
+  "common": {
+    "liked": "保存済み",
+    "discover": "探索",
+    "profile": "プロフィール",
+    "settings": "設定",
+    "language": "言語",
+    "english": "English",
+    "spanish": "Español",
+    "japanese": "日本語",
+    "chineseHK": "繁體中文",
+    "ok": "OK",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "close": "閉じる",
+    "back": "戻る",
+    "next": "次へ",
+    "previous": "前へ",
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "tryAgain": "もう一度試す"
+  },
+  "deck": {
+    "openNow": "営業中",
+    "closed": "休業中",
+    "findingMore": "さらにレストランを検索中...",
+    "noMore": "近くにレストランがありません",
+    "changeLocation": "位置情報を変更",
+    "adjustFilters": "フィルターを調整",
+    "photos": "写真"
+  },
+  "filters": {
+    "cuisine": "料理",
+    "price": "価格",
+    "distance": "距離",
+    "rating": "評価",
+    "openNow": "営業中",
+    "apply": "フィルターを適用",
+    "reset": "リセット"
+  },
+  "cuisines": {
+    "chinese": "中華料理",
+    "italian": "イタリアン",
+    "japanese": "和食",
+    "korean": "韓国料理",
+    "thai": "タイ料理",
+    "indian": "インド料理",
+    "mexican": "メキシコ料理",
+    "american": "アメリカン",
+    "french": "フランス料理",
+    "spanish": "スペイン料理",
+    "portuguese": "ポルトガル料理",
+    "vietnamese": "ベトナム料理",
+    "burger": "ハンバーガー",
+    "pizza": "ピザ",
+    "sushi": "寿司",
+    "seafood": "シーフード",
+    "vegetarian": "ベジタリアン",
+    "vegan": "ビーガン",
+    "fastfood": "ファストフード",
+    "cafe": "カフェ"
+  },
+  "priceLevel": {
+    "cheap": "$",
+    "moderate": "$$",
+    "expensive": "$$$",
+    "veryExpensive": "$$$$",
+    "budget": "リーズナブル",
+    "moderateLabel": "中程度",
+    "upscale": "高級",
+    "fineDining": "ファインダイニング"
+  },
+  "restaurant": {
+    "call": "電話する",
+    "directions": "道順",
+    "website": "ウェブサイト",
+    "reviews": "レビュー",
+    "hours": "営業時間",
+    "address": "住所",
+    "distance": "距離",
+    "phone": "電話",
+    "like": "好き",
+    "unlike": "好きじゃない",
+    "share": "共有",
+    "description": "説明",
+    "away": "離れている"
+  },
+  "days": {
+    "monday": "月曜日",
+    "tuesday": "火曜日",
+    "wednesday": "水曜日",
+    "thursday": "木曜日",
+    "friday": "金曜日",
+    "saturday": "土曜日",
+    "sunday": "日曜日"
+  },
+  "time": {
+    "am": "午前",
+    "pm": "午後",
+    "monthsAgo": "ヶ月前",
+    "yearsAgo": "年前",
+    "daysAgo": "日前",
+    "hoursAgo": "時間前",
+    "minutesAgo": "分前"
+  },
+  "buttons": {
+    "like": "好き",
+    "pass": "スキップ",
+    "superLike": "大好き"
+  }
+}

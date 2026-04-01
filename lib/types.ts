@@ -25,6 +25,7 @@ export type CuisineType =
 export type Restaurant = {
   id: string;
   name: string;
+  nameLocalized?: Record<string, string>; // { 'zh-HK': '樂天皇朝', 'es': 'Paradise Dynasty', etc }
   cuisine: string[];
   rating: number;
   reviewCount: number;
