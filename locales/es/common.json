@@ -108,5 +108,40 @@
     "like": "ME GUSTA",
     "pass": "PASAR",
     "superLike": "ME ENCANTA"
+  },
+  "streak": {
+    "days": "días seguidos",
+    "new": "¡Nueva racha!",
+    "keep": "¡Sigue así!"
+  },
+  "plan": {
+    "title": "Planear una visita",
+    "today": "Hoy",
+    "tomorrow": "Mañana",
+    "weekend": "Este fin de semana",
+    "lunch": "Almuerzo · 12pm",
+    "dinner": "Cena · 7pm",
+    "planned": "Planificado",
+    "cancel": "Cancelar plan",
+    "reminderTitle": "¡Es hora de visitar!",
+    "satDinner": "Sáb · Cena · 7pm"
+  },
+  "friend": {
+    "title": "Explorar con un amigo",
+    "create": "Crear sesión",
+    "join": "Unirse a sesión",
+    "waiting": "Esperando al amigo…",
+    "active": "Sesión activa",
+    "match": "¡Es un match!",
+    "share": "Compartir código",
+    "enterCode": "Ingresa el código",
+    "sessionCode": "Código de sesión",
+    "joinBtn": "Unirse",
+    "cancel": "Cancelar",
+    "matchDesc": "¡A los dos les gustó este lugar!"
+  },
+  "preferences": {
+    "suggestion": "Parece que te encanta {cuisine} — ¿filtrar por eso?",
+    "tryIt": "Probar"
   }
 }

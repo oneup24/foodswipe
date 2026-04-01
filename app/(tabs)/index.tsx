@@ -19,10 +19,12 @@ import Animated, {
 import { ScreenContainer } from "@/components/screen-container";
 import { SwipeCard } from "@/components/swipe-card";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { StreakBadge } from "@/components/streak-badge";
+import { FriendSessionModal } from "@/components/friend-session-modal";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
 import { useThemeContext } from "@/lib/theme-provider";
-import { useLanguage } from "@/hooks/use-language";
+import { useStreak } from "@/hooks/use-streak";
 import { SettingsModal } from "@/components/settings-modal";
 import { Restaurant } from "@/lib/types";
 import { useInterstitialAd, useRewardedAd, AD_UNITS } from "@/lib/ads";
@@ -31,12 +33,22 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH - 32;
 
 export default function DiscoverScreen() {
-  const { state, swipeRight, swipeLeft, swipeUp, resetStack } = useSwipe();
+  const { state, swipeRight, swipeLeft, swipeUp, resetStack, setFilters, cuisineScores } = useSwipe();
   const colors = useColors();
   const { colorScheme, toggleColorScheme } = useThemeContext();
   const router = useRouter();
   const swipeCountRef = useRef(0);
+  const localSwipeCount = useRef(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFriendModal, setShowFriendModal] = useState(false);
+  const syncLikeRef = useRef<((placeId: string) => void) | null>(null);
+
+  // Streak
+  const { streakCount, incrementStreak } = useStreak();
+
+  // Cuisine suggestion banner
+  const [suggestionCuisine, setSuggestionCuisine] = useState<string | null>(null);
+  const suggestionOpacity = useSharedValue(0);
 
   // Ads
   const {
@@ -89,6 +101,11 @@ export default function DiscoverScreen() {
     transform: [{ translateY: toastTranslateY.value }],
   }));
 
+  const suggestionStyle = useAnimatedStyle(() => ({
+    opacity: suggestionOpacity.value,
+    transform: [{ translateY: withTiming(suggestionOpacity.value === 0 ? -10 : 0, { duration: 300 }) }],
+  }));
+
   const maybeShowInterstitial = useCallback(() => {
     swipeCountRef.current += 1;
     if (swipeCountRef.current % 10 === 0 && isInterstitialLoaded) {
@@ -96,27 +113,52 @@ export default function DiscoverScreen() {
     }
   }, [isInterstitialLoaded, showInterstitial]);
 
+  const maybeShowCuisineSuggestion = useCallback((scores: Record<string, number>) => {
+    localSwipeCount.current += 1;
+    if (localSwipeCount.current % 10 !== 0) return;
+
+    const topEntry = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+    if (!topEntry || topEntry[1] < 4) return;
+
+    const [topCuisine] = topEntry;
+    const alreadyFiltered = state.filters.cuisines.includes(topCuisine as any);
+    if (alreadyFiltered) return;
+
+    setSuggestionCuisine(topCuisine);
+    suggestionOpacity.value = withTiming(1, { duration: 300 });
+    setTimeout(() => {
+      suggestionOpacity.value = withTiming(0, { duration: 400 });
+      setTimeout(() => setSuggestionCuisine(null), 450);
+    }, 4000);
+  }, [state.filters.cuisines, suggestionOpacity]);
+
   const handleSwipeRight = useCallback(
     (restaurant: Restaurant) => {
       swipeRight(restaurant);
       showToast(`❤️ Liked ${restaurant.name}!`);
       maybeShowInterstitial();
+      incrementStreak();
+      maybeShowCuisineSuggestion({ ...cuisineScores, ...Object.fromEntries(restaurant.cuisine.map((c) => [c, (cuisineScores[c] ?? 0) + 2])) });
+      if (syncLikeRef.current) syncLikeRef.current(restaurant.id);
     },
-    [swipeRight, showToast, maybeShowInterstitial]
+    [swipeRight, showToast, maybeShowInterstitial, incrementStreak, maybeShowCuisineSuggestion, cuisineScores]
   );
 
   const handleSwipeLeft = useCallback(() => {
     swipeLeft();
     maybeShowInterstitial();
-  }, [swipeLeft, maybeShowInterstitial]);
+    incrementStreak();
+  }, [swipeLeft, maybeShowInterstitial, incrementStreak]);
 
   const handleSwipeUp = useCallback(
     (restaurant: Restaurant) => {
       swipeUp(restaurant);
       showToast(`⭐ Super Liked ${restaurant.name}!`);
       maybeShowInterstitial();
+      incrementStreak();
+      if (syncLikeRef.current) syncLikeRef.current(restaurant.id);
     },
-    [swipeUp, showToast, maybeShowInterstitial]
+    [swipeUp, showToast, maybeShowInterstitial, incrementStreak]
   );
 
   const handlePress = useCallback(
@@ -135,19 +177,16 @@ export default function DiscoverScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     const top = state.cardStack[0];
-    swipeRight(top);
-    showToast(`❤️ Liked ${top.name}!`);
-    maybeShowInterstitial();
-  }, [state.cardStack, swipeRight, showToast, maybeShowInterstitial]);
+    handleSwipeRight(top);
+  }, [state.cardStack, handleSwipeRight]);
 
   const handlePassButton = useCallback(() => {
     if (state.cardStack.length === 0) return;
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    swipeLeft();
-    maybeShowInterstitial();
-  }, [state.cardStack, swipeLeft, maybeShowInterstitial]);
+    handleSwipeLeft();
+  }, [state.cardStack, handleSwipeLeft]);
 
   const handleSuperLikeButton = useCallback(() => {
     if (state.cardStack.length === 0) return;
@@ -155,10 +194,16 @@ export default function DiscoverScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     const top = state.cardStack[0];
-    swipeUp(top);
-    showToast(`⭐ Super Liked ${top.name}!`);
-    maybeShowInterstitial();
-  }, [state.cardStack, swipeUp, showToast, maybeShowInterstitial]);
+    handleSwipeUp(top);
+  }, [state.cardStack, handleSwipeUp]);
+
+  const handleApplyCuisineSuggestion = useCallback(() => {
+    if (!suggestionCuisine) return;
+    setFilters({ ...state.filters, cuisines: [suggestionCuisine as any] });
+    suggestionOpacity.value = withTiming(0, { duration: 300 });
+    setTimeout(() => setSuggestionCuisine(null), 350);
+    showToast(`✅ Filtering for ${suggestionCuisine}!`);
+  }, [suggestionCuisine, state.filters, setFilters, suggestionOpacity, showToast]);
 
   // Keyboard shortcuts on web (← pass, → like, ↑ super like)
   useEffect(() => {
@@ -200,11 +245,26 @@ export default function DiscoverScreen() {
           <IconSymbol name="chevron.down" size={14} color={colors.muted} />
         </Pressable>
 
-        {/* App Title */}
-        <Text style={[styles.appTitle, { color: colors.primary }]}>FoodSwipe</Text>
+        {/* Center: Title + Streak */}
+        <View style={styles.titleGroup}>
+          <Text style={[styles.appTitle, { color: colors.primary }]}>FoodSwipe</Text>
+          <StreakBadge count={streakCount} />
+        </View>
 
         {/* Right buttons */}
         <View style={styles.headerRight}>
+          {/* Friend Session Button */}
+          <Pressable
+            onPress={() => setShowFriendModal(true)}
+            style={({ pressed }) => [
+              styles.filterButton,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={{ fontSize: 16 }}>👥</Text>
+          </Pressable>
+
           {/* Dark mode toggle */}
           <Pressable
             onPress={toggleColorScheme}
@@ -253,6 +313,24 @@ export default function DiscoverScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* Cuisine Suggestion Banner */}
+      {suggestionCuisine && (
+        <Animated.View style={[styles.suggestionBanner, { backgroundColor: colors.surface, borderColor: colors.border }, suggestionStyle]}>
+          <Text style={[styles.suggestionText, { color: colors.foreground }]} numberOfLines={1}>
+            💡 You love {suggestionCuisine} — filter for it?
+          </Text>
+          <Pressable
+            onPress={handleApplyCuisineSuggestion}
+            style={[styles.tryItBtn, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.tryItBtnText}>Try it</Text>
+          </Pressable>
+          <Pressable onPress={() => { suggestionOpacity.value = withTiming(0, { duration: 300 }); setTimeout(() => setSuggestionCuisine(null), 350); }}>
+            <Text style={[styles.dismissText, { color: colors.muted }]}>✕</Text>
+          </Pressable>
+        </Animated.View>
+      )}
 
       {/* Card Stack Area */}
       <View style={styles.cardArea}>
@@ -378,6 +456,14 @@ export default function DiscoverScreen() {
 
       {/* Settings Modal */}
       <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* Friend Session Modal */}
+      <FriendSessionModal
+        visible={showFriendModal}
+        onClose={() => setShowFriendModal(false)}
+        onSyncLike={(placeId) => { if (syncLikeRef.current) syncLikeRef.current(placeId); }}
+        syncLikeRef={syncLikeRef}
+      />
     </ScreenContainer>
   );
 }
@@ -399,27 +485,32 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1,
-    maxWidth: 140,
+    maxWidth: 120,
   },
   locationText: {
     fontSize: 13,
     fontWeight: "600",
     flex: 1,
   },
+  titleGroup: {
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
+  },
   appTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     letterSpacing: -0.5,
   },
   headerRight: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
     alignItems: "center",
   },
   filterButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -432,6 +523,36 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  suggestionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  suggestionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+  },
+  tryItBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  tryItBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  dismissText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   cardArea: {
     flex: 1,

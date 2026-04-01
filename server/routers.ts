@@ -220,6 +220,34 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ── Friend Session: in-memory, 2-hour lifetime ─────────────────────────────
+type FriendSession = {
+  createdAt: number;
+  participants: string[];
+  likes: Map<string, Set<string>>; // placeId → participantIds who liked
+  matches: string[];               // placeIds liked by both participants
+};
+
+const friendSessions = new Map<string, FriendSession>();
+
+function generateCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+function generateId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+// Prune sessions older than 2 hours every 10 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+  for (const [code, session] of friendSessions) {
+    if (session.createdAt < cutoff) friendSessions.delete(code);
+  }
+}, 10 * 60 * 1000);
+// ───────────────────────────────────────────────────────────────────────────
+
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -291,14 +319,14 @@ export const appRouter = router({
           {
             headers: {
               "X-Goog-Api-Key": ENV.googlePlacesApiKey,
-              "X-Goog-FieldMask": "formattedPhoneNumber,websiteUri,regularOpeningHours,reviews,photos",
+              "X-Goog-FieldMask": "nationalPhoneNumber,websiteUri,regularOpeningHours,reviews,photos",
             },
           }
         );
         if (!res.ok) throw new Error("Places API v1 details request failed");
 
         type NewPlaceDetail = {
-          formattedPhoneNumber?: string;
+          nationalPhoneNumber?: string;
           websiteUri?: string;
           regularOpeningHours?: { weekdayDescriptions?: string[] };
           photos?: { name: string }[];
@@ -317,7 +345,7 @@ export const appRouter = router({
         );
 
         return {
-          phone: data.formattedPhoneNumber ?? null,
+          phone: data.nationalPhoneNumber ?? null,
           website: data.websiteUri ?? null,
           weekdayText: data.regularOpeningHours?.weekdayDescriptions ?? null,
           photos: detailPhotos,
@@ -461,6 +489,66 @@ export const appRouter = router({
 
         // New API doesn't use page tokens; fetchMoreRestaurants handles pagination via random offsets
         return { restaurants, nextPageToken: null };
+      }),
+  }),
+
+  friendSession: router({
+    create: publicProcedure.mutation(() => {
+      const code = generateCode();
+      const participantId = generateId();
+      friendSessions.set(code, {
+        createdAt: Date.now(),
+        participants: [participantId],
+        likes: new Map(),
+        matches: [],
+      });
+      return { code, participantId };
+    }),
+
+    join: publicProcedure
+      .input(z.object({ code: z.string() }))
+      .mutation(({ input }) => {
+        const session = friendSessions.get(input.code.toUpperCase());
+        if (!session) return { participantId: null, valid: false };
+        if (session.participants.length >= 2) return { participantId: null, valid: false };
+        const participantId = generateId();
+        session.participants.push(participantId);
+        return { participantId, valid: true };
+      }),
+
+    syncLike: publicProcedure
+      .input(z.object({ code: z.string(), participantId: z.string(), placeId: z.string() }))
+      .mutation(({ input }) => {
+        const session = friendSessions.get(input.code.toUpperCase());
+        if (!session) return { newMatch: false };
+        if (!session.participants.includes(input.participantId)) return { newMatch: false };
+
+        if (!session.likes.has(input.placeId)) {
+          session.likes.set(input.placeId, new Set());
+        }
+        session.likes.get(input.placeId)!.add(input.participantId);
+
+        // Check for match: all participants liked this place
+        const likedBy = session.likes.get(input.placeId)!;
+        const isMatch = session.participants.every((p) => likedBy.has(p));
+        if (isMatch && !session.matches.includes(input.placeId)) {
+          session.matches.push(input.placeId);
+          return { newMatch: true, matchedPlaceId: input.placeId };
+        }
+        return { newMatch: false };
+      }),
+
+    getSession: publicProcedure
+      .input(z.object({ code: z.string(), participantId: z.string() }))
+      .query(({ input }) => {
+        const session = friendSessions.get(input.code.toUpperCase());
+        if (!session) return { participantCount: 0, matches: [], active: false };
+        const isMember = session.participants.includes(input.participantId);
+        return {
+          participantCount: session.participants.length,
+          matches: isMember ? session.matches : [],
+          active: isMember && session.participants.length === 2,
+        };
       }),
   }),
 });

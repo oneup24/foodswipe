@@ -13,6 +13,7 @@ import { trpc } from "./trpc";
 import { useLanguage } from "../hooks/use-language";
 
 const LIKED_STORAGE_KEY = "@foodswipe_liked";
+const CUISINE_PREFS_KEY = "@foodswipe_cuisine_prefs";
 
 type State = {
   cardStack: Restaurant[];
@@ -27,6 +28,7 @@ type State = {
   searchLng: number;
   searchRadius: number;
   isFetchingMore: boolean;
+  cuisineScores: Record<string, number>;
 };
 
 type Action =
@@ -41,7 +43,8 @@ type Action =
   | { type: "APPEND_RESTAURANTS"; restaurants: Restaurant[]; nextPageToken: string | null; searchLat: number; searchLng: number; searchRadius: number }
   | { type: "SET_FETCHING_MORE"; loading: boolean }
   | { type: "RESET_STACK" }
-  | { type: "SET_LOADING"; loading: boolean };
+  | { type: "SET_LOADING"; loading: boolean }
+  | { type: "SET_CUISINE_SCORES"; scores: Record<string, number> };
 
 const DEFAULT_FILTERS: FilterState = {
   cuisines: [],
@@ -91,7 +94,11 @@ function reducer(state: State, action: Action): State {
       const newLiked = alreadyLiked
         ? state.likedRestaurants
         : [action.restaurant, ...state.likedRestaurants];
-      return { ...state, cardStack: newStack, likedRestaurants: newLiked };
+      const newScores = { ...state.cuisineScores };
+      action.restaurant.cuisine.forEach((c) => {
+        newScores[c] = (newScores[c] ?? 0) + 2;
+      });
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores };
     }
     case "SWIPE_UP": {
       const newStack = state.cardStack.slice(1);
@@ -99,10 +106,21 @@ function reducer(state: State, action: Action): State {
       const newLiked = alreadyLiked
         ? state.likedRestaurants
         : [action.restaurant, ...state.likedRestaurants];
-      return { ...state, cardStack: newStack, likedRestaurants: newLiked };
+      const newScores = { ...state.cuisineScores };
+      action.restaurant.cuisine.forEach((c) => {
+        newScores[c] = (newScores[c] ?? 0) + 3;
+      });
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores };
     }
     case "SWIPE_LEFT": {
-      return { ...state, cardStack: state.cardStack.slice(1) };
+      const passed = state.cardStack[0];
+      const newScores = { ...state.cuisineScores };
+      if (passed) {
+        passed.cuisine.forEach((c) => {
+          newScores[c] = Math.max(0, (newScores[c] ?? 0) - 1);
+        });
+      }
+      return { ...state, cardStack: state.cardStack.slice(1), cuisineScores: newScores };
     }
     case "SET_LIKED":
       return { ...state, likedRestaurants: action.liked };
@@ -169,6 +187,8 @@ function reducer(state: State, action: Action): State {
     }
     case "SET_LOADING":
       return { ...state, isLoading: action.loading };
+    case "SET_CUISINE_SCORES":
+      return { ...state, cuisineScores: action.scores };
     default:
       return state;
   }
@@ -184,6 +204,7 @@ type SwipeContextType = {
   setLocation: (location: LocationState) => void;
   resetStack: () => void;
   currentCard: Restaurant | null;
+  cuisineScores: Record<string, number>;
 };
 
 const SwipeContext = createContext<SwipeContextType | null>(null);
@@ -202,6 +223,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     searchLng: DEFAULT_LOCATION.lng,
     searchRadius: 2000,
     isFetchingMore: false,
+    cuisineScores: {},
   });
 
   const { currentLanguage } = useLanguage();
@@ -337,13 +359,19 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  // Load persisted liked restaurants on mount
+  // Load persisted liked restaurants and cuisine scores on mount
   useEffect(() => {
-    AsyncStorage.getItem(LIKED_STORAGE_KEY).then((data) => {
-      if (data) {
+    AsyncStorage.multiGet([LIKED_STORAGE_KEY, CUISINE_PREFS_KEY]).then(([likedEntry, scoresEntry]) => {
+      if (likedEntry[1]) {
         try {
-          const liked = JSON.parse(data) as Restaurant[];
+          const liked = JSON.parse(likedEntry[1]) as Restaurant[];
           dispatch({ type: "SET_LIKED", liked });
+        } catch {}
+      }
+      if (scoresEntry[1]) {
+        try {
+          const scores = JSON.parse(scoresEntry[1]) as Record<string, number>;
+          dispatch({ type: "SET_CUISINE_SCORES", scores });
         } catch {}
       }
     });
@@ -353,6 +381,13 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     AsyncStorage.setItem(LIKED_STORAGE_KEY, JSON.stringify(state.likedRestaurants));
   }, [state.likedRestaurants]);
+
+  // Persist cuisine scores whenever they change
+  useEffect(() => {
+    if (Object.keys(state.cuisineScores).length > 0) {
+      AsyncStorage.setItem(CUISINE_PREFS_KEY, JSON.stringify(state.cuisineScores));
+    }
+  }, [state.cuisineScores]);
 
   const swipeRight = useCallback((restaurant: Restaurant) => {
     dispatch({ type: "SWIPE_RIGHT", restaurant });
@@ -396,6 +431,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         setLocation,
         resetStack,
         currentCard,
+        cuisineScores: state.cuisineScores,
       }}
     >
       {children}

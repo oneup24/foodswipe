@@ -62,8 +62,10 @@ export default function OnboardingScreen() {
 
   const goNext = useCallback(() => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
-    if (currentIndex < SLIDES.length - 1) {
-      scrollRef.current?.scrollTo({ x: SCREEN_WIDTH * (currentIndex + 1), animated: true });
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < SLIDES.length) {
+      scrollRef.current?.scrollTo({ x: SCREEN_WIDTH * nextIndex, animated: true });
+      setCurrentIndex(nextIndex);
     }
   }, [currentIndex]);
 

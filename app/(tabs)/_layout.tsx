@@ -76,6 +76,19 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="lists"
+        options={{
+          title: "Lists",
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol
+              size={26}
+              name={focused ? "list.bullet.rectangle.fill" : "list.bullet.rectangle"}
+              color={color}
+            />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

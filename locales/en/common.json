@@ -108,5 +108,40 @@
     "like": "LIKE",
     "pass": "PASS",
     "superLike": "SUPER LIKE"
+  },
+  "streak": {
+    "days": "Day Streak",
+    "new": "New streak!",
+    "keep": "Keep it up!"
+  },
+  "plan": {
+    "title": "Plan a Visit",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "weekend": "This Weekend",
+    "lunch": "Lunch · 12pm",
+    "dinner": "Dinner · 7pm",
+    "planned": "Planned",
+    "cancel": "Cancel Plan",
+    "reminderTitle": "Time to visit!",
+    "satDinner": "Sat · Dinner · 7pm"
+  },
+  "friend": {
+    "title": "Swipe with a Friend",
+    "create": "Create Session",
+    "join": "Join Session",
+    "waiting": "Waiting for friend…",
+    "active": "Session Active",
+    "match": "It's a Match!",
+    "share": "Share Code",
+    "enterCode": "Enter session code",
+    "sessionCode": "Session Code",
+    "joinBtn": "Join",
+    "cancel": "Cancel",
+    "matchDesc": "You both liked this place!"
+  },
+  "preferences": {
+    "suggestion": "You seem to love {cuisine} — try filtering for it?",
+    "tryIt": "Try it"
   }
 }

@@ -21,6 +21,7 @@ import * as Sharing from "expo-sharing";
 import { captureRef } from "react-native-view-shot";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { SaveToListModal } from "@/components/save-to-list-modal";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
 import { useLanguage } from "@/hooks/use-language";
@@ -43,6 +44,7 @@ export default function RestaurantDetailScreen() {
 
   const shareCardRef = useRef<View>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showSaveToList, setShowSaveToList] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
 
   const heroPhotos = restaurant?.photos?.length ? restaurant.photos : restaurant ? [restaurant.imageUrl] : [];
@@ -181,6 +183,10 @@ export default function RestaurantDetailScreen() {
     if (!details?.website) return;
     Linking.openURL(details.website);
   }, [details?.website]);
+
+  const handleGoogleReview = useCallback(() => {
+    Linking.openURL(`https://search.google.com/local/writereview?placeid=${id}`);
+  }, [id]);
 
   if (!restaurant) {
     return (
@@ -452,6 +458,27 @@ export default function RestaurantDetailScreen() {
                   No reviews available.
                 </Text>
               )}
+
+              {/* Leave a Google Review CTA */}
+              <Pressable
+                onPress={handleGoogleReview}
+                style={({ pressed }) => [
+                  styles.googleReviewBtn,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.googleReviewStar}>⭐</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.googleReviewTitle, { color: colors.foreground }]}>
+                    Leave a Google Review
+                  </Text>
+                  <Text style={[styles.googleReviewSub, { color: colors.muted }]}>
+                    Visited this place? Help others discover it.
+                  </Text>
+                </View>
+                <Text style={[styles.googleReviewArrow, { color: colors.muted }]}>↗</Text>
+              </Pressable>
             </View>
           </>
         )}
@@ -529,6 +556,19 @@ export default function RestaurantDetailScreen() {
         </Pressable>
 
         <Pressable
+          onPress={() => setShowSaveToList(true)}
+          style={({ pressed }) => [
+            styles.actionBtn,
+            styles.listActionBtn,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+            pressed && { transform: [{ scale: 0.94 }] },
+          ]}
+        >
+          <Text style={styles.listActionIcon}>📋</Text>
+          <Text style={[styles.listActionLabel, { color: colors.foreground }]}>Lists</Text>
+        </Pressable>
+
+        <Pressable
           onPress={handleLike}
           style={({ pressed }) => [
             styles.actionBtn,
@@ -541,6 +581,16 @@ export default function RestaurantDetailScreen() {
           <Text style={styles.likeLabel}>{isLiked ? "Liked!" : "Like"}</Text>
         </Pressable>
       </View>
+
+      {/* Save to List Modal */}
+      {restaurant && (
+        <SaveToListModal
+          visible={showSaveToList}
+          restaurantId={restaurant.id}
+          restaurantName={restaurant.name}
+          onClose={() => setShowSaveToList(false)}
+        />
+      )}
     </View>
   );
 }
@@ -662,6 +712,19 @@ const styles = StyleSheet.create({
   reviewTime: { fontSize: 12, marginTop: 1 },
   reviewStars: { flexDirection: "row", gap: 1 },
   reviewText: { fontSize: 14, lineHeight: 20 },
+  googleReviewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  googleReviewStar: { fontSize: 22 },
+  googleReviewTitle: { fontSize: 14, fontWeight: "700" },
+  googleReviewSub: { fontSize: 12, marginTop: 2 },
+  googleReviewArrow: { fontSize: 18, fontWeight: "600" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",
@@ -730,8 +793,11 @@ const styles = StyleSheet.create({
   },
   passBtn: { backgroundColor: "transparent", borderWidth: 2, borderColor: "#FF3B30" },
   likeBtn: { backgroundColor: "#FF4B4B" },
+  listActionBtn: { borderWidth: 1.5 },
   passIcon: { fontSize: 18, color: "#FF3B30", fontWeight: "700" },
   passLabel: { fontSize: 16, color: "#FF3B30", fontWeight: "700" },
   likeIcon: { fontSize: 18, color: "#fff", fontWeight: "700" },
   likeLabel: { fontSize: 16, color: "#fff", fontWeight: "700" },
+  listActionIcon: { fontSize: 18 },
+  listActionLabel: { fontSize: 15, fontWeight: "700" },
 });

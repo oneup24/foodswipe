@@ -65,3 +65,19 @@ export type AppState = {
   location: LocationState;
   isLoading: boolean;
 };
+
+export type PlannedVisit = {
+  restaurantId: string;
+  restaurantName: string;
+  notificationId: string;
+  timestamp: number;
+};
+
+export type UserList = {
+  id: string;
+  name: string;
+  emoji: string;
+  restaurantIds: string[];
+  createdAt: number;
+  isDefault: boolean;
+};

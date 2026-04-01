@@ -38,6 +38,8 @@ const MAPPING = {
   "arrow.counterclockwise": "refresh",
   "square.grid.2x2.fill": "grid-view",
   "list.bullet": "list",
+  "list.bullet.rectangle.fill": "view-list",
+  "list.bullet.rectangle": "view-list",
   "info.circle": "info",
   "info.circle.fill": "info",
   "square.and.arrow.up": "share",

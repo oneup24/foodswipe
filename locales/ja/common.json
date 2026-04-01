@@ -108,5 +108,40 @@
     "like": "好き",
     "pass": "スキップ",
     "superLike": "大好き"
+  },
+  "streak": {
+    "days": "日連続",
+    "new": "新記録！",
+    "keep": "続けよう！"
+  },
+  "plan": {
+    "title": "訪問を計画",
+    "today": "今日",
+    "tomorrow": "明日",
+    "weekend": "今週末",
+    "lunch": "ランチ · 12時",
+    "dinner": "ディナー · 19時",
+    "planned": "予定済み",
+    "cancel": "計画をキャンセル",
+    "reminderTitle": "訪問の時間です！",
+    "satDinner": "土曜 · ディナー · 19時"
+  },
+  "friend": {
+    "title": "友達と探索",
+    "create": "セッション作成",
+    "join": "セッションに参加",
+    "waiting": "友達を待っています…",
+    "active": "セッション中",
+    "match": "マッチしました！",
+    "share": "コードを共有",
+    "enterCode": "セッションコードを入力",
+    "sessionCode": "セッションコード",
+    "joinBtn": "参加",
+    "cancel": "キャンセル",
+    "matchDesc": "二人ともここが好き！"
+  },
+  "preferences": {
+    "suggestion": "{cuisine}がお好きですね — フィルターで絞りますか？",
+    "tryIt": "試す"
   }
 }

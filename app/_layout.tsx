@@ -5,8 +5,9 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
-import { Platform } from "react-native";
+import { AppState, AppStateStatus, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { setupNotifications, useNotifications } from "@/hooks/use-notifications";
 import { initAds } from "@/lib/ads";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -21,6 +22,7 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { SwipeProvider } from "@/lib/swipe-context";
+import { ListsProvider } from "@/lib/lists-context";
 import { initializeI18n } from "@/lib/i18n";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -37,15 +39,34 @@ export default function RootLayout() {
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
   const router = useRouter();
+  const { scheduleReEngagement, cancelReEngagement } = useNotifications();
 
-  // Initialize AdMob and redirect to onboarding on first launch
+  // Initialize AdMob, i18n, notifications, and redirect to onboarding on first launch
   useEffect(() => {
     initAds();
     initializeI18n();
     AsyncStorage.getItem("@foodswipe_onboarded").then((val) => {
       if (!val) router.replace("/onboarding");
     });
+    // Set up daily notifications (native only)
+    setupNotifications();
   }, []);
+
+  // Schedule re-engagement notification when app backgrounds, cancel when foregrounded
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (nextState === "background" || nextState === "inactive") {
+        const likedData = await AsyncStorage.getItem("@foodswipe_liked");
+        const liked = likedData ? (JSON.parse(likedData) as unknown[]) : [];
+        scheduleReEngagement(liked.length);
+      } else if (nextState === "active") {
+        cancelReEngagement();
+      }
+    };
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, [scheduleReEngagement, cancelReEngagement]);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
@@ -100,6 +121,7 @@ export default function RootLayout() {
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
           <SwipeProvider>
+            <ListsProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="onboarding" />
@@ -120,7 +142,12 @@ export default function RootLayout() {
                 name="privacy-policy"
                 options={{ presentation: "modal", headerShown: false }}
               />
+              <Stack.Screen
+                name="list-detail"
+                options={{ presentation: "modal", headerShown: false }}
+              />
             </Stack>
+            </ListsProvider>
           </SwipeProvider>
           <StatusBar style="auto" />
         </QueryClientProvider>
