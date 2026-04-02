@@ -44,26 +44,30 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
   const handleClearLiked = useCallback(() => {
     const count = state.likedRestaurants.length;
     if (count === 0) return;
-    Alert.alert(
-      'Clear All Liked',
-      `This will permanently remove all ${count} saved restaurant${count !== 1 ? 's' : ''}. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            const ids = state.likedRestaurants.map((r) => r.id);
-            // Clear all from lists context first
-            ids.forEach((id) => removeRestaurantFromAll(id));
-            // Clear liked state in one dispatch (reliable, no loop race)
-            clearAllLiked();
-            // Clear plans from storage
-            await AsyncStorage.removeItem('@foodswipe_plans');
-          },
-        },
-      ]
-    );
+
+    const message = `This will permanently remove all ${count} liked restaurant${count !== 1 ? 's' : ''}. This cannot be undone.`;
+
+    const doDelete = async () => {
+      const ids = state.likedRestaurants.map((r) => r.id);
+      ids.forEach((id) => removeRestaurantFromAll(id));
+      clearAllLiked();
+      await AsyncStorage.removeItem('@foodswipe_plans');
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Clear All Liked?\n\n${message}`)) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        'Clear All Liked',
+        message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Clear All', style: 'destructive', onPress: doDelete },
+        ]
+      );
+    }
   }, [state.likedRestaurants, clearAllLiked, removeRestaurantFromAll]);
 
   const handlePrivacy = useCallback(() => {
