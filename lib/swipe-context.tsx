@@ -15,6 +15,7 @@ import { useLanguage } from "../hooks/use-language";
 
 const LIKED_STORAGE_KEY = "@foodswipe_liked";
 const CUISINE_PREFS_KEY = "@foodswipe_cuisine_prefs";
+const LOCATION_KEY = "@foodswipe_location";
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -392,9 +393,19 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.cardStack.length, state.isFetchingMore, state.isLoading, state.allRestaurants.length]);
 
-  // Auto-detect location on mount
+  // Load persisted location on mount, fall back to GPS auto-detect if none saved
   useEffect(() => {
     (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(LOCATION_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw) as LocationState;
+          dispatch({ type: "SET_LOCATION", location: saved });
+          return;
+        }
+      } catch {}
+
+      // No saved location — try GPS
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") return;
@@ -433,6 +444,13 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
       }
     })();
   }, []);
+
+  // Persist location whenever it changes (skip the hardcoded default)
+  useEffect(() => {
+    if (state.location !== DEFAULT_LOCATION) {
+      AsyncStorage.setItem(LOCATION_KEY, JSON.stringify(state.location));
+    }
+  }, [state.location]);
 
   // Load persisted liked restaurants and cuisine scores on mount
   useEffect(() => {
@@ -493,8 +511,9 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setLocation = useCallback((location: LocationState) => {
+    utils.places.nearbyRestaurants.invalidate();
     dispatch({ type: "SET_LOCATION", location });
-  }, []);
+  }, [utils]);
 
   const resetStack = useCallback(() => {
     dispatch({ type: "RESET_STACK" });
