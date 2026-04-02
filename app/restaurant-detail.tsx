@@ -35,7 +35,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 export default function RestaurantDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { state, swipeRight, swipeLeft, unlike } = useSwipe();
+  const { state, swipeRight, unlike } = useSwipe();
   const colors = useColors();
   const { t, currentLanguage } = useLanguage();
   const insets = useSafeAreaInsets();
@@ -685,11 +685,16 @@ export default function RestaurantDetailScreen() {
         ]}
       >
         <Pressable
-          onPress={() => { router.back(); setTimeout(() => swipeLeft(), 100); }}
-          style={({ pressed }) => [styles.actionBtn, styles.passBtn, pressed && { transform: [{ scale: 0.94 }] }]}
+          onPress={handleDirections}
+          style={({ pressed }) => [
+            styles.actionBtn,
+            styles.listActionBtn,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+            pressed && { transform: [{ scale: 0.94 }] },
+          ]}
         >
-          <Text style={styles.passIcon}>✕</Text>
-          <Text style={styles.passLabel}>Pass</Text>
+          <Text style={styles.listActionIcon}>🗺️</Text>
+          <Text style={[styles.listActionLabel, { color: colors.foreground }]}>Directions</Text>
         </Pressable>
 
         <Pressable
@@ -928,7 +933,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
   },
-  passBtn: { backgroundColor: "transparent", borderWidth: 2, borderColor: "#FF3B30" },
   likeBtn: { backgroundColor: "#FF4B4B" },
   listActionBtn: { borderWidth: 1.5 },
   instagramBtn: { backgroundColor: "#C13584" },
@@ -950,8 +954,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
   },
-  passIcon: { fontSize: 18, color: "#FF3B30", fontWeight: "700" },
-  passLabel: { fontSize: 16, color: "#FF3B30", fontWeight: "700" },
   likeIcon: { fontSize: 18, color: "#fff", fontWeight: "700" },
   likeLabel: { fontSize: 16, color: "#fff", fontWeight: "700" },
   listActionIcon: { fontSize: 18 },

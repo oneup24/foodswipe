@@ -29,6 +29,7 @@ type State = {
   searchRadius: number;
   isFetchingMore: boolean;
   cuisineScores: Record<string, number>;
+  lastSwiped: { restaurant: Restaurant; type: "right" | "left" | "up"; wasLikedBefore: boolean } | null;
 };
 
 type Action =
@@ -44,7 +45,8 @@ type Action =
   | { type: "SET_FETCHING_MORE"; loading: boolean }
   | { type: "RESET_STACK" }
   | { type: "SET_LOADING"; loading: boolean }
-  | { type: "SET_CUISINE_SCORES"; scores: Record<string, number> };
+  | { type: "SET_CUISINE_SCORES"; scores: Record<string, number> }
+  | { type: "UNDO_SWIPE" };
 
 const DEFAULT_FILTERS: FilterState = {
   cuisines: [],
@@ -98,7 +100,7 @@ function reducer(state: State, action: Action): State {
       action.restaurant.cuisine.forEach((c) => {
         newScores[c] = (newScores[c] ?? 0) + 2;
       });
-      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores };
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores, lastSwiped: { restaurant: action.restaurant, type: "right", wasLikedBefore: alreadyLiked } };
     }
     case "SWIPE_UP": {
       const newStack = state.cardStack.slice(1);
@@ -110,7 +112,7 @@ function reducer(state: State, action: Action): State {
       action.restaurant.cuisine.forEach((c) => {
         newScores[c] = (newScores[c] ?? 0) + 3;
       });
-      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores };
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores, lastSwiped: { restaurant: action.restaurant, type: "up", wasLikedBefore: alreadyLiked } };
     }
     case "SWIPE_LEFT": {
       const passed = state.cardStack[0];
@@ -120,7 +122,24 @@ function reducer(state: State, action: Action): State {
           newScores[c] = Math.max(0, (newScores[c] ?? 0) - 1);
         });
       }
-      return { ...state, cardStack: state.cardStack.slice(1), cuisineScores: newScores };
+      return { ...state, cardStack: state.cardStack.slice(1), cuisineScores: newScores, lastSwiped: passed ? { restaurant: passed, type: "left", wasLikedBefore: false } : state.lastSwiped };
+    }
+    case "UNDO_SWIPE": {
+      if (!state.lastSwiped) return state;
+      const { restaurant, type, wasLikedBefore } = state.lastSwiped;
+      const newStack = [restaurant, ...state.cardStack];
+      const newScores = { ...state.cuisineScores };
+      if (type === "right") {
+        restaurant.cuisine.forEach((c) => { newScores[c] = Math.max(0, (newScores[c] ?? 0) - 2); });
+      } else if (type === "up") {
+        restaurant.cuisine.forEach((c) => { newScores[c] = Math.max(0, (newScores[c] ?? 0) - 3); });
+      } else {
+        restaurant.cuisine.forEach((c) => { newScores[c] = (newScores[c] ?? 0) + 1; });
+      }
+      const newLiked = (type === "right" || type === "up") && !wasLikedBefore
+        ? state.likedRestaurants.filter((r) => r.id !== restaurant.id)
+        : state.likedRestaurants;
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores, lastSwiped: null };
     }
     case "SET_LIKED":
       return { ...state, likedRestaurants: action.liked };
@@ -199,6 +218,7 @@ type SwipeContextType = {
   swipeRight: (restaurant: Restaurant) => void;
   swipeLeft: () => void;
   swipeUp: (restaurant: Restaurant) => void;
+  undoSwipe: () => void;
   unlike: (id: string) => void;
   setFilters: (filters: FilterState) => void;
   setLocation: (location: LocationState) => void;
@@ -224,6 +244,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     searchRadius: 2000,
     isFetchingMore: false,
     cuisineScores: {},
+    lastSwiped: null,
   });
 
   const { currentLanguage } = useLanguage();
@@ -397,6 +418,10 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SWIPE_LEFT" });
   }, []);
 
+  const undoSwipe = useCallback(() => {
+    dispatch({ type: "UNDO_SWIPE" });
+  }, []);
+
   const swipeUp = useCallback((restaurant: Restaurant) => {
     dispatch({ type: "SWIPE_UP", restaurant });
   }, []);
@@ -426,6 +451,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         swipeRight,
         swipeLeft,
         swipeUp,
+        undoSwipe,
         unlike,
         setFilters,
         setLocation,

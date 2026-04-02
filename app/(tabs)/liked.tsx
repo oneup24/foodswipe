@@ -188,6 +188,15 @@ function RestaurantCard({
           { backgroundColor: restaurant.isOpen ? "#34C759" : "#FF3B30" },
         ]}
       />
+
+      {/* More actions button */}
+      <Pressable
+        onPress={(e) => { e.stopPropagation?.(); handleLongPress(); }}
+        style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.7 }]}
+        hitSlop={8}
+      >
+        <Text style={styles.moreBtnText}>⋯</Text>
+      </Pressable>
     </Pressable>
   );
 }
@@ -336,9 +345,6 @@ export default function LikedScreen() {
         </View>
       ) : (
         <>
-          <Text style={[styles.hintText, { color: colors.muted }]}>
-            Long press to share or remove · Tap to view details
-          </Text>
           <FlatList
             data={state.likedRestaurants}
             renderItem={renderItem}
@@ -448,11 +454,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     fontWeight: "700",
-  },
-  hintText: {
-    fontSize: 12,
-    textAlign: "center",
-    paddingVertical: 8,
   },
   grid: {
     padding: 16,
@@ -577,6 +578,21 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 1.5,
     borderColor: "#fff",
+  },
+  moreBtn: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  moreBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 1,
   },
   emptyState: {
     flex: 1,

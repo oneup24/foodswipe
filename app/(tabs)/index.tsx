@@ -23,7 +23,6 @@ import { StreakBadge } from "@/components/streak-badge";
 import { FriendSessionModal } from "@/components/friend-session-modal";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
-import { useThemeContext } from "@/lib/theme-provider";
 import { useStreak } from "@/hooks/use-streak";
 import { SettingsModal } from "@/components/settings-modal";
 import { Restaurant } from "@/lib/types";
@@ -33,9 +32,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH - 32;
 
 export default function DiscoverScreen() {
-  const { state, swipeRight, swipeLeft, swipeUp, resetStack, setFilters, cuisineScores } = useSwipe();
+  const { state, swipeRight, swipeLeft, swipeUp, undoSwipe, resetStack, setFilters, cuisineScores } = useSwipe();
   const colors = useColors();
-  const { colorScheme, toggleColorScheme } = useThemeContext();
   const router = useRouter();
   const swipeCountRef = useRef(0);
   const localSwipeCount = useRef(0);
@@ -214,10 +212,11 @@ export default function DiscoverScreen() {
       if (e.key === "ArrowRight") { handleSwipeRight(top); }
       else if (e.key === "ArrowLeft") { handleSwipeLeft(); }
       else if (e.key === "ArrowUp") { handleSwipeUp(top); }
+      else if (e.key === "z" && state.lastSwiped) { undoSwipe(); }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [state.cardStack, handleSwipeRight, handleSwipeLeft, handleSwipeUp]);
+  }, [state.cardStack, state.lastSwiped, handleSwipeRight, handleSwipeLeft, handleSwipeUp, undoSwipe]);
 
   const visibleCards = state.cardStack.slice(0, 4);
   const { isFetchingMore } = state;
@@ -263,22 +262,6 @@ export default function DiscoverScreen() {
             ]}
           >
             <Text style={{ fontSize: 16 }}>👥</Text>
-          </Pressable>
-
-          {/* Dark mode toggle */}
-          <Pressable
-            onPress={toggleColorScheme}
-            style={({ pressed }) => [
-              styles.filterButton,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <IconSymbol
-              name={colorScheme === "dark" ? "sun.max.fill" : "moon.fill"}
-              size={18}
-              color={colors.foreground}
-            />
           </Pressable>
 
           {/* Settings Button */}
@@ -349,9 +332,9 @@ export default function DiscoverScreen() {
                 You've seen them all!
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-                Watch a short ad to unlock more restaurants nearby.
+                Check back soon — new spots are added regularly.
               </Text>
-              {isRewardedLoaded ? (
+              {isRewardedLoaded && (
                 <Pressable
                   onPress={showRewarded}
                   style={({ pressed }) => [
@@ -362,19 +345,20 @@ export default function DiscoverScreen() {
                 >
                   <Text style={styles.refreshButtonText}>Watch Ad for More</Text>
                 </Pressable>
-              ) : (
-                <Pressable
-                  onPress={resetStack}
-                  style={({ pressed }) => [
-                    styles.refreshButton,
-                    { backgroundColor: colors.primary },
-                    pressed && { opacity: 0.8 },
-                  ]}
-                >
-                  <IconSymbol name="arrow.counterclockwise" size={16} color="#fff" />
-                  <Text style={styles.refreshButtonText}>Refresh</Text>
-                </Pressable>
               )}
+              <Pressable
+                onPress={resetStack}
+                style={({ pressed }) => [
+                  styles.refreshButton,
+                  isRewardedLoaded
+                    ? { backgroundColor: "transparent", borderWidth: 1.5, borderColor: colors.border }
+                    : { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <IconSymbol name="arrow.counterclockwise" size={16} color={isRewardedLoaded ? colors.muted : "#fff"} />
+                <Text style={[styles.refreshButtonText, isRewardedLoaded && { color: colors.muted }]}>Refresh</Text>
+              </Pressable>
             </View>
           )
         ) : (
@@ -401,6 +385,23 @@ export default function DiscoverScreen() {
       {/* Action Buttons */}
       {visibleCards.length > 0 && (
         <View style={styles.actionRow}>
+          {/* Undo */}
+          <Pressable
+            onPress={() => {
+              if (!state.lastSwiped) return;
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              undoSwipe();
+            }}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              styles.undoBtn,
+              { shadowColor: colors.foreground, borderColor: colors.border, opacity: state.lastSwiped ? 1 : 0.3 },
+              pressed && state.lastSwiped && { transform: [{ scale: 0.92 }] },
+            ]}
+          >
+            <Text style={[styles.undoIcon, { color: colors.muted }]}>↩</Text>
+          </Pressable>
+
           {/* Pass */}
           <Pressable
             onPress={handlePassButton}
@@ -616,6 +617,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
+  },
+  undoBtn: {
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  undoIcon: {
+    fontSize: 18,
+    fontWeight: "600",
   },
   passBtn: {
     backgroundColor: "#fff",
