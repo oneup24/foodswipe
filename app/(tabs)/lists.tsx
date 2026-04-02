@@ -96,13 +96,15 @@ export default function ListsScreen() {
     setEditingList(list);
     setFormName(list.name);
     setFormEmoji(list.emoji);
+    setDescInput(list.description ?? "");
   }, []);
 
   const handleRename = useCallback(() => {
     if (!editingList || !formName.trim()) return;
-    renameList(editingList.id, formName.trim(), formEmoji);
+    renameList(editingList.id, formName.trim(), formEmoji, descInput.trim() || undefined);
     setEditingList(null);
-  }, [editingList, formName, formEmoji, renameList]);
+    setDescInput("");
+  }, [editingList, formName, formEmoji, descInput, renameList]);
 
   const handleLongPress = useCallback((list: UserList) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -222,20 +224,18 @@ export default function ListsScreen() {
               />
             </View>
 
-            {!editingList && (
-              <TextInput
-                value={descInput}
-                onChangeText={setDescInput}
-                placeholder="Description (optional)"
-                placeholderTextColor={colors.muted}
-                style={[styles.descInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
-                multiline
-                numberOfLines={2}
-                maxLength={120}
-                returnKeyType="done"
-                blurOnSubmit
-              />
-            )}
+            <TextInput
+              value={descInput}
+              onChangeText={setDescInput}
+              placeholder="Description (optional)"
+              placeholderTextColor={colors.muted}
+              style={[styles.descInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+              multiline
+              numberOfLines={2}
+              maxLength={120}
+              returnKeyType="done"
+              blurOnSubmit
+            />
 
             <View style={styles.modalActions}>
               <Pressable
