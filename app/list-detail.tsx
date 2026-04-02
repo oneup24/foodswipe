@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Share,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useLists } from "@/lib/lists-context";
 import { useSwipe } from "@/lib/swipe-context";
+import { trpc } from "@/lib/trpc";
 import { useColors } from "@/hooks/use-colors";
 import { Restaurant } from "@/lib/types";
 
@@ -89,8 +91,10 @@ export default function ListDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { lists, removeFromList } = useLists();
+  const { lists, removeFromList, setShareToken } = useLists();
   const { state } = useSwipe();
+  const shareMutation = trpc.list.share.useMutation();
+  const [isSharing, setIsSharing] = useState(false);
 
   const list = lists.find((l) => l.id === id);
 
@@ -107,6 +111,43 @@ export default function ListDetailScreen() {
     },
     [list, removeFromList]
   );
+
+  const handleShare = useCallback(async () => {
+    if (!list) return;
+    setIsSharing(true);
+    try {
+      let url: string;
+      if (list.shareToken) {
+        url = list.shareToken;
+      } else {
+        const result = await shareMutation.mutateAsync({
+          name: list.name,
+          emoji: list.emoji,
+          description: list.description,
+          restaurants: restaurants.map((r) => ({
+            id: r.id,
+            name: r.name,
+            cuisine: r.cuisine,
+            rating: r.rating,
+            priceLevel: r.priceLevel,
+            imageUrl: r.imageUrl,
+            address: r.address,
+          })),
+        });
+        url = result.url;
+        setShareToken(list.id, result.url);
+      }
+      await Share.share({
+        title: `${list.emoji} ${list.name}`,
+        message: `Check out my FoodSwipe list "${list.name}"! ${url}`,
+        url,
+      });
+    } catch {
+      Alert.alert("Couldn't share", "Please try again.");
+    } finally {
+      setIsSharing(false);
+    }
+  }, [list, restaurants, shareMutation, setShareToken]);
 
   const renderItem = useCallback(
     ({ item }: { item: Restaurant }) => (
@@ -143,7 +184,18 @@ export default function ListDetailScreen() {
           <Text style={styles.headerEmoji}>{list.emoji}</Text>
           <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>{list.name}</Text>
         </View>
-        <View style={styles.backBtn2} />
+        <Pressable
+          onPress={handleShare}
+          hitSlop={12}
+          style={styles.backBtn2}
+          disabled={isSharing}
+          accessibilityLabel="Share list"
+          accessibilityRole="button"
+        >
+          {isSharing
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <IconSymbol name="square.and.arrow.up" size={22} color={colors.primary} />}
+        </Pressable>
       </View>
 
       {restaurants.length === 0 ? (

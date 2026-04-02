@@ -80,4 +80,6 @@ export type UserList = {
   restaurantIds: string[];
   createdAt: number;
   isDefault: boolean;
+  description?: string;
+  shareToken?: string; // stores the full share URL once generated
 };

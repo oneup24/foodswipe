@@ -74,20 +74,23 @@ export default function ListsScreen() {
   const [editingList, setEditingList] = useState<UserList | null>(null);
   const [formName, setFormName] = useState("");
   const [formEmoji, setFormEmoji] = useState("📋");
+  const [descInput, setDescInput] = useState("");
 
   const openCreate = useCallback(() => {
     setFormName("");
     setFormEmoji("📋");
+    setDescInput("");
     setShowCreate(true);
   }, []);
 
   const handleCreate = useCallback(() => {
     const trimmed = formName.trim();
     if (!trimmed) return;
-    createList(trimmed, formEmoji);
+    createList(trimmed, formEmoji, descInput.trim() || undefined);
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowCreate(false);
-  }, [formName, formEmoji, createList]);
+    setDescInput("");
+  }, [formName, formEmoji, descInput, createList]);
 
   const openEdit = useCallback((list: UserList) => {
     setEditingList(list);
@@ -180,7 +183,7 @@ export default function ListsScreen() {
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => { setShowCreate(false); setEditingList(null); }}
+          onPress={() => { setShowCreate(false); setEditingList(null); setDescInput(""); }}
         >
           <Pressable style={[styles.modalSheet, { backgroundColor: colors.surface }]} onPress={() => {}}>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
@@ -219,9 +222,24 @@ export default function ListsScreen() {
               />
             </View>
 
+            {!editingList && (
+              <TextInput
+                value={descInput}
+                onChangeText={setDescInput}
+                placeholder="Description (optional)"
+                placeholderTextColor={colors.muted}
+                style={[styles.descInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+                multiline
+                numberOfLines={2}
+                maxLength={120}
+                returnKeyType="done"
+                blurOnSubmit
+              />
+            )}
+
             <View style={styles.modalActions}>
               <Pressable
-                onPress={() => { setShowCreate(false); setEditingList(null); }}
+                onPress={() => { setShowCreate(false); setEditingList(null); setDescInput(""); }}
                 style={[styles.cancelBtn, { borderColor: colors.border }]}
               >
                 <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
@@ -397,6 +415,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1.5,
+  },
+  descInput: {
+    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    minHeight: 64,
+    textAlignVertical: "top",
   },
   modalActions: {
     flexDirection: "row",
