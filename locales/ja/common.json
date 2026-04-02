@@ -143,5 +143,8 @@
   "preferences": {
     "suggestion": "{cuisine}がお好きですね — フィルターで絞りますか？",
     "tryIt": "試す"
+  },
+  "list": {
+    "shareList": "リストをシェア"
   }
 }

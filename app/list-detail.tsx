@@ -19,6 +19,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useLists } from "@/lib/lists-context";
 import { useSwipe } from "@/lib/swipe-context";
 import { trpc } from "@/lib/trpc";
+import { useLanguage } from "@/hooks/use-language";
 import { useColors } from "@/hooks/use-colors";
 import { Restaurant } from "@/lib/types";
 
@@ -91,6 +92,7 @@ export default function ListDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { t } = useLanguage();
   const { lists, removeFromList, setShareToken } = useLists();
   const { state } = useSwipe();
   const shareMutation = trpc.list.share.useMutation();
@@ -184,17 +186,34 @@ export default function ListDetailScreen() {
           <Text style={styles.headerEmoji}>{list.emoji}</Text>
           <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>{list.name}</Text>
         </View>
+        <View style={styles.backBtn2} />
+      </View>
+
+      {/* Description + Share strip */}
+      <View style={[styles.descShareStrip, { borderBottomColor: colors.border }]}>
+        {list.description ? (
+          <Text style={[styles.descText, { color: colors.muted }]}>{list.description}</Text>
+        ) : null}
         <Pressable
           onPress={handleShare}
-          hitSlop={12}
-          style={styles.backBtn2}
           disabled={isSharing}
-          accessibilityLabel="Share list"
+          accessibilityLabel={t('list.shareList')}
           accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.shareBtn,
+            { backgroundColor: colors.primary },
+            pressed && { opacity: 0.85 },
+            isSharing && { opacity: 0.6 },
+          ]}
         >
-          {isSharing
-            ? <ActivityIndicator size="small" color={colors.primary} />
-            : <IconSymbol name="square.and.arrow.up" size={22} color={colors.primary} />}
+          {isSharing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <IconSymbol name="square.and.arrow.up" size={16} color="#fff" />
+              <Text style={styles.shareBtnText}>{t('list.shareList')}</Text>
+            </>
+          )}
         </Pressable>
       </View>
 
@@ -258,6 +277,31 @@ const styles = StyleSheet.create({
     width: 44,
     alignItems: "center",
     justifyContent: "center",
+  },
+  descShareStrip: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 10,
+    borderBottomWidth: 0.5,
+  },
+  descText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  shareBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   hintText: {
     fontSize: 12,

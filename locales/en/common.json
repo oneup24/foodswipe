@@ -143,5 +143,8 @@
   "preferences": {
     "suggestion": "You seem to love {cuisine} — try filtering for it?",
     "tryIt": "Try it"
+  },
+  "list": {
+    "shareList": "Share this list"
   }
 }

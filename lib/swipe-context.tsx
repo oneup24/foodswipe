@@ -15,6 +15,19 @@ import { useLanguage } from "../hooks/use-language";
 const LIKED_STORAGE_KEY = "@foodswipe_liked";
 const CUISINE_PREFS_KEY = "@foodswipe_cuisine_prefs";
 
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 type State = {
   cardStack: Restaurant[];
   likedRestaurants: Restaurant[];
@@ -184,7 +197,12 @@ function reducer(state: State, action: Action): State {
       };
     }
     case "APPEND_RESTAURANTS": {
-      const newOnes = action.restaurants.filter((r) => !state.seenPlaceIds.has(r.id));
+      const newOnes = action.restaurants
+        .filter((r) => !state.seenPlaceIds.has(r.id))
+        .map((r) => ({
+          ...r,
+          distance: Math.round(haversineKm(state.location.lat, state.location.lng, r.lat, r.lng) * 10) / 10,
+        }));
       const newSeenIds = new Set(state.seenPlaceIds);
       action.restaurants.forEach((r) => newSeenIds.add(r.id));
       const filteredNew = filterRestaurants(newOnes, state.filters);
@@ -224,6 +242,7 @@ type SwipeContextType = {
   swipeUp: (restaurant: Restaurant) => void;
   undoSwipe: () => void;
   unlike: (id: string) => void;
+  clearAllLiked: () => void;
   setFilters: (filters: FilterState) => void;
   setLocation: (location: LocationState) => void;
   resetStack: () => void;
@@ -366,11 +385,23 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         const [address] = await Location.reverseGeocodeAsync({
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
-        });
+        }).catch(() => [null]);
 
-        const cityName =
-          [address?.city, address?.region, address?.country].filter(Boolean).join(", ") ||
-          "My Location";
+        const nativeCity = [address?.city, address?.region, address?.country]
+          .filter(Boolean)
+          .join(", ");
+
+        let cityName = nativeCity;
+        if (!cityName) {
+          try {
+            const geo = await utils.places.reverseGeocode.fetch({
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+            });
+            cityName = geo.cityName ?? "";
+          } catch {}
+        }
+        cityName = cityName || "My Location";
 
         dispatch({
           type: "SET_LOCATION",
@@ -432,6 +463,10 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "UNLIKE", id });
   }, []);
 
+  const clearAllLiked = useCallback(() => {
+    dispatch({ type: "SET_LIKED", liked: [] });
+  }, []);
+
   const setFilters = useCallback((filters: FilterState) => {
     dispatch({ type: "SET_FILTERS", filters });
   }, []);
@@ -455,6 +490,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         swipeUp,
         undoSwipe,
         unlike,
+        clearAllLiked,
         setFilters,
         setLocation,
         resetStack,

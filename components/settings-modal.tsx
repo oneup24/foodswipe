@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useColors } from '@/hooks/use-colors';
 import { useLanguage } from '@/hooks/use-language';
 import { useSwipe } from '@/lib/swipe-context';
+import { useLists } from '@/lib/lists-context';
 import { useThemeContext } from '@/lib/theme-provider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -27,7 +28,8 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
   const colors = useColors();
   const router = useRouter();
   const { currentLanguage, changeLanguage, t } = useLanguage();
-  const { state, unlike } = useSwipe();
+  const { state, clearAllLiked } = useSwipe();
+  const { removeRestaurantFromAll } = useLists();
   const { colorScheme, toggleColorScheme } = useThemeContext();
 
   const isDark = colorScheme === 'dark';
@@ -40,9 +42,11 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
   ];
 
   const handleClearLiked = useCallback(() => {
+    const count = state.likedRestaurants.length;
+    if (count === 0) return;
     Alert.alert(
       'Clear All Liked',
-      'This will remove all your saved restaurants. This cannot be undone.',
+      `This will permanently remove all ${count} saved restaurant${count !== 1 ? 's' : ''}. This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -50,14 +54,17 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
           style: 'destructive',
           onPress: async () => {
             const ids = state.likedRestaurants.map((r) => r.id);
-            ids.forEach((id) => unlike(id));
+            // Clear all from lists context first
+            ids.forEach((id) => removeRestaurantFromAll(id));
+            // Clear liked state in one dispatch (reliable, no loop race)
+            clearAllLiked();
+            // Clear plans from storage
             await AsyncStorage.removeItem('@foodswipe_plans');
-            await AsyncStorage.removeItem('@foodswipe_lists');
           },
         },
       ]
     );
-  }, [state.likedRestaurants, unlike]);
+  }, [state.likedRestaurants, clearAllLiked, removeRestaurantFromAll]);
 
   const handlePrivacy = useCallback(() => {
     onClose();

@@ -143,5 +143,8 @@
   "preferences": {
     "suggestion": "你好像很喜歡{cuisine} — 要加入篩選器嗎？",
     "tryIt": "試試"
+  },
+  "list": {
+    "shareList": "分享此清單"
   }
 }
