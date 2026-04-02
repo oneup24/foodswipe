@@ -55,6 +55,7 @@ export default function RestaurantDetailScreen() {
 
   const heroPhotos = restaurant?.photos?.length ? restaurant.photos : restaurant ? [restaurant.imageUrl] : [];
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [hoursExpanded, setHoursExpanded] = useState(false);
 
   const { data: details, isLoading: isLoadingDetails, isError: isDetailsError } = trpc.places.restaurantDetails.useQuery(
     { placeId: id! },
@@ -422,7 +423,7 @@ export default function RestaurantDetailScreen() {
             </View>
           </View>
 
-          {/* Full weekly hours */}
+          {/* Hours — collapsed by default, expandable */}
           <View style={styles.infoRow}>
             <View style={[styles.infoIcon, { backgroundColor: colors.surface }]}>
               <IconSymbol name="clock.fill" size={18} color={colors.primary} />
@@ -431,16 +432,28 @@ export default function RestaurantDetailScreen() {
               <Text style={[styles.infoLabel, { color: colors.muted }]}>{t('restaurant.hours')}</Text>
               {isLoadingDetails ? (
                 <ActivityIndicator size="small" color={colors.muted} style={{ alignSelf: "flex-start", marginTop: 4 }} />
-              ) : translatedHours ? (
-                translatedHours.map((line, i) => (
-                  <Text key={i} style={[styles.infoValue, { color: colors.foreground, fontWeight: "400" }]}>
-                    {line}
-                  </Text>
-                ))
               ) : (
-                <Text style={[styles.infoValue, { color: colors.foreground }]}>
-                  {restaurant.isOpen ? t('deck.openNow') : t('deck.closed')}
-                </Text>
+                <>
+                  {/* Summary row — always visible */}
+                  <Text style={[styles.infoValue, { color: restaurant.isOpen ? "#34C759" : "#FF3B30", fontWeight: "600" }]}>
+                    {restaurant.isOpen ? t('deck.openNow') : t('deck.closed')}
+                    {translatedHours?.[0] ? `  ·  ${translatedHours[0]}` : ""}
+                  </Text>
+                  {/* Expanded weekly schedule */}
+                  {hoursExpanded && translatedHours && translatedHours.slice(1).map((line, i) => (
+                    <Text key={i} style={[styles.infoValue, { color: colors.foreground, fontWeight: "400" }]}>
+                      {line}
+                    </Text>
+                  ))}
+                  {/* Toggle */}
+                  {translatedHours && translatedHours.length > 1 && (
+                    <Pressable onPress={() => setHoursExpanded((v) => !v)} style={{ marginTop: 4 }}>
+                      <Text style={[styles.infoValue, { color: colors.primary, fontWeight: "600" }]}>
+                        {hoursExpanded ? "▴ Hide hours" : "▾ Show hours"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
               )}
             </View>
           </View>

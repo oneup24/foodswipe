@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,15 +6,16 @@ import {
   Dimensions,
   Pressable,
   Platform,
-  ActivityIndicator,
+  ScrollView,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSequence,
   withTiming,
+  withRepeat,
 } from "react-native-reanimated";
 import { ScreenContainer } from "@/components/screen-container";
 import { SwipeCard } from "@/components/swipe-card";
@@ -28,8 +29,33 @@ import { SettingsModal } from "@/components/settings-modal";
 import { Restaurant } from "@/lib/types";
 import { useInterstitialAd, useRewardedAd, AD_UNITS } from "@/lib/ads";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH - 32;
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.62;
+
+function SkeletonCard({ index }: { index: number }) {
+  const opacity = useSharedValue(0.4);
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(withTiming(0.7, { duration: 450 }), withTiming(0.4, { duration: 450 })),
+      -1,
+      false
+    );
+  }, []);
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View
+      style={[
+        styles.skeletonCard,
+        animStyle,
+        { zIndex: 100 - index, top: index * 8, transform: [{ scale: index === 0 ? 1 : 0.95 - index * 0.02 }] },
+      ]}
+    >
+      <View style={styles.skeletonLine1} />
+      <View style={styles.skeletonLine2} />
+    </Animated.View>
+  );
+}
 
 export default function DiscoverScreen() {
   const { state, swipeRight, swipeLeft, swipeUp, undoSwipe, resetStack, setFilters, cuisineScores } = useSwipe();
@@ -40,6 +66,17 @@ export default function DiscoverScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [showFriendModal, setShowFriendModal] = useState(false);
   const syncLikeRef = useRef<((placeId: string) => void) | null>(null);
+  const params = useLocalSearchParams<{ openFriendSession?: string }>();
+
+  // Open Friend Session modal when navigated here from Profile tab
+  useFocusEffect(
+    useCallback(() => {
+      if (params.openFriendSession === "1") {
+        setShowFriendModal(true);
+        router.setParams({ openFriendSession: undefined });
+      }
+    }, [params.openFriendSession, router])
+  );
 
   // Streak
   const { streakCount, incrementStreak } = useStreak();
@@ -221,6 +258,56 @@ export default function DiscoverScreen() {
   const visibleCards = state.cardStack.slice(0, 4);
   const { isFetchingMore } = state;
 
+  // Quick-filter chips: Open Now, ⭐4+, top cuisine shortcuts
+  const quickChips = useMemo(() => {
+    const chips: { key: string; label: string; active: boolean }[] = [
+      {
+        key: "openNow",
+        label: "Open Now",
+        active: state.filters.openNow,
+      },
+      {
+        key: "rating4",
+        label: "⭐ 4+",
+        active: state.filters.minRating >= 4,
+      },
+    ];
+    // Add top 3 cuisines from preference scores (if any)
+    const topCuisines = Object.entries(cuisineScores)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([c]) => c);
+    const fallbackCuisines = ["Italian", "Japanese", "Korean"];
+    const cuisineList = topCuisines.length >= 1 ? topCuisines : fallbackCuisines;
+    cuisineList.forEach((c) => {
+      chips.push({
+        key: `cuisine_${c}`,
+        label: c,
+        active: state.filters.cuisines.includes(c as any),
+      });
+    });
+    return chips;
+  }, [state.filters, cuisineScores]);
+
+  const handleChipPress = useCallback(
+    (chip: { key: string; active: boolean }) => {
+      if (Platform.OS !== "web") Haptics.selectionAsync();
+      if (chip.key === "openNow") {
+        setFilters({ ...state.filters, openNow: !chip.active });
+      } else if (chip.key === "rating4") {
+        setFilters({ ...state.filters, minRating: chip.active ? 0 : 4 });
+      } else if (chip.key.startsWith("cuisine_")) {
+        const cuisine = chip.key.replace("cuisine_", "") as any;
+        const existing = state.filters.cuisines;
+        const next = chip.active
+          ? existing.filter((c) => c !== cuisine)
+          : [...existing, cuisine];
+        setFilters({ ...state.filters, cuisines: next });
+      }
+    },
+    [state.filters, setFilters]
+  );
+
   return (
     <ScreenContainer containerClassName="bg-background" className="flex-1">
       {/* Header */}
@@ -252,18 +339,6 @@ export default function DiscoverScreen() {
 
         {/* Right buttons */}
         <View style={styles.headerRight}>
-          {/* Friend Session Button */}
-          <Pressable
-            onPress={() => setShowFriendModal(true)}
-            style={({ pressed }) => [
-              styles.filterButton,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text style={{ fontSize: 16 }}>👥</Text>
-          </Pressable>
-
           {/* Settings Button */}
           <Pressable
             onPress={() => setShowSettings(true)}
@@ -297,6 +372,37 @@ export default function DiscoverScreen() {
         </View>
       </View>
 
+      {/* Quick-filter chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipsRow}
+        style={[styles.chipsScroll, { borderBottomColor: colors.border }]}
+      >
+        {quickChips.map((chip) => (
+          <Pressable
+            key={chip.key}
+            onPress={() => handleChipPress(chip)}
+            style={({ pressed }) => [
+              styles.chip,
+              chip.active
+                ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                : { backgroundColor: colors.surface, borderColor: colors.border },
+              pressed && { opacity: 0.75 },
+            ]}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                { color: chip.active ? "#fff" : colors.foreground },
+              ]}
+            >
+              {chip.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
       {/* Cuisine Suggestion Banner */}
       {suggestionCuisine && (
         <Animated.View style={[styles.suggestionBanner, { backgroundColor: colors.surface, borderColor: colors.border }, suggestionStyle]}>
@@ -319,11 +425,9 @@ export default function DiscoverScreen() {
       <View style={styles.cardArea}>
         {visibleCards.length === 0 ? (
           isFetchingMore ? (
-            <View style={styles.emptyState}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.emptySubtitle, { color: colors.muted, marginTop: 12 }]}>
-                Finding more restaurants…
-              </Text>
+            <View style={[styles.cardStack, { width: CARD_WIDTH }]}>
+              <SkeletonCard index={1} />
+              <SkeletonCard index={0} />
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -525,6 +629,25 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  chipsScroll: {
+    borderBottomWidth: 0.5,
+  },
+  chipsRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
   suggestionBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -682,5 +805,29 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  skeletonCard: {
+    position: "absolute",
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 20,
+    backgroundColor: "rgba(128,128,128,0.12)",
+    alignSelf: "center",
+    overflow: "hidden",
+    justifyContent: "flex-end",
+    padding: 20,
+    gap: 10,
+  },
+  skeletonLine1: {
+    height: 20,
+    borderRadius: 10,
+    width: "55%",
+    backgroundColor: "rgba(128,128,128,0.25)",
+  },
+  skeletonLine2: {
+    height: 14,
+    borderRadius: 7,
+    width: "38%",
+    backgroundColor: "rgba(128,128,128,0.18)",
   },
 });

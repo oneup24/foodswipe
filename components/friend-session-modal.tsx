@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,10 +11,11 @@ import {
   Alert,
   Animated,
 } from "react-native";
+import { SvgXml } from "react-native-svg";
+import QRCode from "qrcode";
 import { useColors } from "@/hooks/use-colors";
 import { useLanguage } from "@/hooks/use-language";
 import { trpc } from "@/lib/trpc";
-import { Restaurant } from "@/lib/types";
 
 type SessionState = "idle" | "creating" | "waiting" | "joining" | "active";
 
@@ -35,7 +36,17 @@ export function FriendSessionModal({ visible, onClose, onSyncLike, syncLikeRef }
   const [participantId, setParticipantId] = useState("");
   const [knownMatches, setKnownMatches] = useState<string[]>([]);
   const [matchRestaurant, setMatchRestaurant] = useState<string | null>(null);
+  const [matchVisible, setMatchVisible] = useState(false);
+  const [qrSvg, setQrSvg] = useState<string | null>(null);
   const matchOverlayOpacity = useRef(new Animated.Value(0)).current;
+
+  // Generate QR code SVG when session code is available
+  useEffect(() => {
+    if (!code) { setQrSvg(null); return; }
+    QRCode.toString(code, { type: "svg", width: 180, margin: 1 })
+      .then(setQrSvg)
+      .catch(() => setQrSvg(null));
+  }, [code]);
 
   const createMutation = trpc.friendSession.create.useMutation({
     onSuccess: (data) => {
@@ -102,11 +113,16 @@ export function FriendSessionModal({ visible, onClose, onSyncLike, syncLikeRef }
 
   const showMatch = useCallback((placeId: string) => {
     setMatchRestaurant(placeId);
-    Animated.sequence([
-      Animated.timing(matchOverlayOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.delay(2500),
-      Animated.timing(matchOverlayOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
-    ]).start(() => setMatchRestaurant(null));
+    setMatchVisible(true);
+    matchOverlayOpacity.setValue(0);
+    Animated.timing(matchOverlayOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  }, [matchOverlayOpacity]);
+
+  const dismissMatch = useCallback(() => {
+    Animated.timing(matchOverlayOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+      setMatchRestaurant(null);
+      setMatchVisible(false);
+    });
   }, [matchOverlayOpacity]);
 
   const handleCreate = useCallback(() => {
@@ -189,8 +205,14 @@ export function FriendSessionModal({ visible, onClose, onSyncLike, syncLikeRef }
             <View style={styles.body}>
               <Text style={[styles.codeLabel, { color: colors.muted }]}>{t("friend.sessionCode")}</Text>
               <Text style={[styles.codeText, { color: colors.primary }]}>{code}</Text>
+              {qrSvg ? (
+                <View style={[styles.qrContainer, { backgroundColor: "#fff" }]}>
+                  <SvgXml xml={qrSvg} width={160} height={160} />
+                </View>
+              ) : (
+                <ActivityIndicator color={colors.muted} style={{ marginVertical: 8 }} />
+              )}
               <Text style={[styles.description, { color: colors.muted }]}>{t("friend.waiting")}</Text>
-              <ActivityIndicator color={colors.muted} style={{ marginVertical: 8 }} />
               <Pressable
                 onPress={handleShareCode}
                 style={({ pressed }) => [styles.primaryBtn, { backgroundColor: colors.primary }, pressed && { opacity: 0.8 }]}
@@ -247,13 +269,16 @@ export function FriendSessionModal({ visible, onClose, onSyncLike, syncLikeRef }
         </Pressable>
       </Pressable>
 
-      {/* Match Overlay */}
-      {matchRestaurant && (
-        <Animated.View style={[styles.matchOverlay, { opacity: matchOverlayOpacity }]}>
-          <Text style={styles.matchEmoji}>🎉</Text>
-          <Text style={styles.matchTitle}>{t("friend.match")}</Text>
-          <Text style={styles.matchDesc}>{t("friend.matchDesc")}</Text>
-        </Animated.View>
+      {/* Match Overlay — tap anywhere to dismiss */}
+      {matchVisible && (
+        <Pressable style={styles.matchPressable} onPress={dismissMatch}>
+          <Animated.View style={[styles.matchOverlay, { opacity: matchOverlayOpacity }]}>
+            <Text style={styles.matchEmoji}>🎉</Text>
+            <Text style={styles.matchTitle}>{t("friend.match")}</Text>
+            <Text style={styles.matchDesc}>{t("friend.matchDesc")}</Text>
+            <Text style={styles.matchDismissHint}>Tap anywhere to dismiss</Text>
+          </Animated.View>
+        </Pressable>
       )}
     </Modal>
   );
@@ -349,6 +374,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+  qrContainer: {
+    borderRadius: 12,
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  matchPressable: {
+    ...StyleSheet.absoluteFillObject,
+  },
   matchOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.85)",
@@ -368,5 +402,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "rgba(255,255,255,0.75)",
     textAlign: "center",
+  },
+  matchDismissHint: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.4)",
+    marginTop: 24,
   },
 });

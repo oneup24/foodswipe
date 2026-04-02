@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useColors } from '@/hooks/use-colors';
 import { useLanguage } from '@/hooks/use-language';
-import { useStreak } from '@/hooks/use-streak';
 import { useSwipe } from '@/lib/swipe-context';
 import { useThemeContext } from '@/lib/theme-provider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,7 +27,6 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
   const colors = useColors();
   const router = useRouter();
   const { currentLanguage, changeLanguage, t } = useLanguage();
-  const { streakCount } = useStreak();
   const { state, unlike } = useSwipe();
   const { colorScheme, toggleColorScheme } = useThemeContext();
 
@@ -40,17 +38,6 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     { code: 'ja', label: t('common.japanese'), flag: '🇯🇵' },
     { code: 'zh-HK', label: t('common.chineseHK'), flag: '🇭🇰' },
   ];
-
-  // Compute top 3 cuisine preferences
-  const topCuisines = useMemo(() => {
-    const scores = state.cuisineScores ?? {};
-    return Object.entries(scores)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .filter(([, score]) => score > 0);
-  }, [state.cuisineScores]);
-
-  const maxScore = topCuisines[0]?.[1] ?? 1;
 
   const handleClearLiked = useCallback(() => {
     Alert.alert(
@@ -99,53 +86,6 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
         </View>
 
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-
-          {/* ── Stats Cards ── */}
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={styles.statEmoji}>🔥</Text>
-              <Text style={[styles.statValue, { color: colors.foreground }]}>{streakCount}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>Day Streak</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={styles.statEmoji}>❤️</Text>
-              <Text style={[styles.statValue, { color: colors.foreground }]}>{state.likedRestaurants.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>Saved</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={styles.statEmoji}>🍜</Text>
-              <Text style={[styles.statValue, { color: colors.foreground }]}>{topCuisines.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>Cuisines</Text>
-            </View>
-          </View>
-
-          {/* ── Taste Profile ── */}
-          {topCuisines.length > 0 && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Taste Profile</Text>
-              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                {topCuisines.map(([cuisine, score], i) => (
-                  <View key={cuisine} style={styles.cuisineRow}>
-                    <View style={styles.cuisineLeft}>
-                      <Text style={[styles.cuisineRank, { color: colors.muted }]}>#{i + 1}</Text>
-                      <Text style={[styles.cuisineName, { color: colors.foreground }]}>{cuisine}</Text>
-                    </View>
-                    <View style={styles.barContainer}>
-                      <View
-                        style={[
-                          styles.bar,
-                          {
-                            width: `${(score / maxScore) * 100}%` as any,
-                            backgroundColor: i === 0 ? colors.primary : colors.primary + '60',
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
 
           {/* ── Appearance ── */}
           <View style={styles.section}>
@@ -238,24 +178,6 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700' },
   closeText: { fontSize: 16, fontWeight: '600', width: 48, textAlign: 'right' },
   scroll: { flex: 1 },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 4,
-  },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 4,
-  },
-  statEmoji: { fontSize: 24 },
-  statValue: { fontSize: 22, fontWeight: '900' },
-  statLabel: { fontSize: 11, fontWeight: '500' },
   section: {
     paddingHorizontal: 16,
     paddingTop: 20,
@@ -273,29 +195,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
-  cuisineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  cuisineLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    width: 140,
-  },
-  cuisineRank: { fontSize: 12, fontWeight: '600', width: 24 },
-  cuisineName: { fontSize: 14, fontWeight: '600', flex: 1 },
-  barContainer: {
-    flex: 1,
-    height: 8,
-    backgroundColor: 'rgba(128,128,128,0.15)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  bar: { height: '100%', borderRadius: 4 },
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -210,6 +210,17 @@ export function SwipeCard({
     ),
   }));
 
+  // Ambient edge cues — subtle colored bars that hint at swipe direction
+  const rightEdgeCue = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, SWIPE_THRESHOLD * 0.4], [0, 0.65], Extrapolation.CLAMP),
+  }));
+  const leftEdgeCue = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-SWIPE_THRESHOLD * 0.4, 0], [0.65, 0], Extrapolation.CLAMP),
+  }));
+  const topEdgeCue = useAnimatedStyle(() => ({
+    opacity: interpolate(translateY.value, [SWIPE_UP_THRESHOLD * 0.4, 0], [0.65, 0], Extrapolation.CLAMP),
+  }));
+
   const priceString = "$".repeat(restaurant.priceLevel);
 
   return (
@@ -270,6 +281,11 @@ export function SwipeCard({
 
         {/* Gradient overlay at bottom */}
         <View style={styles.gradient} />
+
+        {/* Ambient edge cues */}
+        <Animated.View style={[styles.edgeCueRight, rightEdgeCue]} pointerEvents="none" />
+        <Animated.View style={[styles.edgeCueLeft, leftEdgeCue]} pointerEvents="none" />
+        <Animated.View style={[styles.edgeCueTop, topEdgeCue]} pointerEvents="none" />
 
         {/* Like overlay */}
         <Animated.View style={[styles.overlay, styles.likeOverlay, likeOpacity]}>
@@ -399,6 +415,36 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     left: "30%",
     borderColor: "#007AFF",
+  },
+  edgeCueRight: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 8,
+    backgroundColor: "#FF4B4B",
+    borderTopRightRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  edgeCueLeft: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: 8,
+    backgroundColor: "#8E8E93",
+    borderTopLeftRadius: 24,
+    borderBottomLeftRadius: 24,
+  },
+  edgeCueTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 8,
+    backgroundColor: "#007AFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   likeText: {
     color: "#34C759",
