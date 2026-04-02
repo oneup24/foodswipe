@@ -7,8 +7,9 @@ import {
   Pressable,
   Platform,
   ActivityIndicator,
+  Animated as RNAnimated,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Animated, {
   useSharedValue,
@@ -23,25 +24,74 @@ import { StreakBadge } from "@/components/streak-badge";
 import { FriendSessionModal } from "@/components/friend-session-modal";
 import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
-import { useThemeContext } from "@/lib/theme-provider";
 import { useStreak } from "@/hooks/use-streak";
 import { SettingsModal } from "@/components/settings-modal";
 import { Restaurant } from "@/lib/types";
 import { useInterstitialAd, useRewardedAd, AD_UNITS } from "@/lib/ads";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH - 32;
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.62;
+
+function SkeletonCard({ index }: { index: number }) {
+  const opacity = useRef(new RNAnimated.Value(0.4)).current;
+  useEffect(() => {
+    const anim = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(opacity, { toValue: 0.75, duration: 700, useNativeDriver: true }),
+        RNAnimated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+  return (
+    <RNAnimated.View
+      style={[
+        styles.skeletonCard,
+        { opacity },
+        { zIndex: 100 - index, top: index * 8, transform: [{ scale: index === 0 ? 1 : 0.95 - index * 0.02 }] },
+      ]}
+    >
+      <View style={styles.skeletonLine1} />
+      <View style={styles.skeletonLine2} />
+    </RNAnimated.View>
+  );
+}
 
 export default function DiscoverScreen() {
-  const { state, swipeRight, swipeLeft, swipeUp, resetStack, setFilters, cuisineScores } = useSwipe();
+  const { state, swipeRight, swipeLeft, swipeUp, undoSwipe, resetStack, setFilters, cuisineScores } = useSwipe();
   const colors = useColors();
-  const { colorScheme, toggleColorScheme } = useThemeContext();
   const router = useRouter();
   const swipeCountRef = useRef(0);
   const localSwipeCount = useRef(0);
   const [showSettings, setShowSettings] = useState(false);
   const [showFriendModal, setShowFriendModal] = useState(false);
   const syncLikeRef = useRef<((placeId: string) => void) | null>(null);
+  const params = useLocalSearchParams<{ openFriendSession?: string }>();
+
+  // Open Friend Session modal when navigated here from Profile tab
+  useFocusEffect(
+    useCallback(() => {
+      if (params.openFriendSession === "1") {
+        setShowFriendModal(true);
+        router.setParams({ openFriendSession: undefined });
+      }
+    }, [params.openFriendSession, router])
+  );
+
+  // Cover screen — shown until first batch of cards confirmed
+  const [coverVisible, setCoverVisible] = useState(true);
+  const coverOpacity = useRef(new RNAnimated.Value(1)).current;
+  const coverDismissed = useRef(false);
+
+  useEffect(() => {
+    if (!state.isLoading && (state.cardStack.length > 0 || state.hasError) && !coverDismissed.current) {
+      coverDismissed.current = true;
+      RNAnimated.timing(coverOpacity, { toValue: 0, duration: 600, useNativeDriver: true })
+        .start(() => setCoverVisible(false));
+    }
+  }, [state.isLoading, state.cardStack.length, state.hasError, coverOpacity]);
 
   // Streak
   const { streakCount, incrementStreak } = useStreak();
@@ -214,10 +264,11 @@ export default function DiscoverScreen() {
       if (e.key === "ArrowRight") { handleSwipeRight(top); }
       else if (e.key === "ArrowLeft") { handleSwipeLeft(); }
       else if (e.key === "ArrowUp") { handleSwipeUp(top); }
+      else if (e.key === "z" && state.lastSwiped) { undoSwipe(); }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [state.cardStack, handleSwipeRight, handleSwipeLeft, handleSwipeUp]);
+  }, [state.cardStack, state.lastSwiped, handleSwipeRight, handleSwipeLeft, handleSwipeUp, undoSwipe]);
 
   const visibleCards = state.cardStack.slice(0, 4);
   const { isFetchingMore } = state;
@@ -253,34 +304,6 @@ export default function DiscoverScreen() {
 
         {/* Right buttons */}
         <View style={styles.headerRight}>
-          {/* Friend Session Button */}
-          <Pressable
-            onPress={() => setShowFriendModal(true)}
-            style={({ pressed }) => [
-              styles.filterButton,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text style={{ fontSize: 16 }}>👥</Text>
-          </Pressable>
-
-          {/* Dark mode toggle */}
-          <Pressable
-            onPress={toggleColorScheme}
-            style={({ pressed }) => [
-              styles.filterButton,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <IconSymbol
-              name={colorScheme === "dark" ? "sun.max.fill" : "moon.fill"}
-              size={18}
-              color={colors.foreground}
-            />
-          </Pressable>
-
           {/* Settings Button */}
           <Pressable
             onPress={() => setShowSettings(true)}
@@ -334,13 +357,23 @@ export default function DiscoverScreen() {
 
       {/* Card Stack Area */}
       <View style={styles.cardArea}>
-        {visibleCards.length === 0 ? (
+        {state.hasError ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Couldn't load restaurants</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>Check your connection and try again.</Text>
+            <Pressable
+              onPress={resetStack}
+              style={({ pressed }) => [styles.refreshButton, { backgroundColor: colors.primary }, pressed && { opacity: 0.8 }]}
+            >
+              <Text style={styles.refreshButtonText}>Try Again</Text>
+            </Pressable>
+          </View>
+        ) : visibleCards.length === 0 ? (
           isFetchingMore ? (
-            <View style={styles.emptyState}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.emptySubtitle, { color: colors.muted, marginTop: 12 }]}>
-                Finding more restaurants…
-              </Text>
+            <View style={[styles.cardStack, { width: CARD_WIDTH }]}>
+              <SkeletonCard index={1} />
+              <SkeletonCard index={0} />
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -349,9 +382,9 @@ export default function DiscoverScreen() {
                 You've seen them all!
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-                Watch a short ad to unlock more restaurants nearby.
+                Check back soon — new spots are added regularly.
               </Text>
-              {isRewardedLoaded ? (
+              {isRewardedLoaded && (
                 <Pressable
                   onPress={showRewarded}
                   style={({ pressed }) => [
@@ -362,19 +395,20 @@ export default function DiscoverScreen() {
                 >
                   <Text style={styles.refreshButtonText}>Watch Ad for More</Text>
                 </Pressable>
-              ) : (
-                <Pressable
-                  onPress={resetStack}
-                  style={({ pressed }) => [
-                    styles.refreshButton,
-                    { backgroundColor: colors.primary },
-                    pressed && { opacity: 0.8 },
-                  ]}
-                >
-                  <IconSymbol name="arrow.counterclockwise" size={16} color="#fff" />
-                  <Text style={styles.refreshButtonText}>Refresh</Text>
-                </Pressable>
               )}
+              <Pressable
+                onPress={resetStack}
+                style={({ pressed }) => [
+                  styles.refreshButton,
+                  isRewardedLoaded
+                    ? { backgroundColor: "transparent", borderWidth: 1.5, borderColor: colors.border }
+                    : { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <IconSymbol name="arrow.counterclockwise" size={16} color={isRewardedLoaded ? colors.muted : "#fff"} />
+                <Text style={[styles.refreshButtonText, isRewardedLoaded && { color: colors.muted }]}>Refresh</Text>
+              </Pressable>
             </View>
           )
         ) : (
@@ -401,8 +435,29 @@ export default function DiscoverScreen() {
       {/* Action Buttons */}
       {visibleCards.length > 0 && (
         <View style={styles.actionRow}>
+          {/* Undo */}
+          <Pressable
+            accessibilityLabel="Undo"
+            accessibilityRole="button"
+            onPress={() => {
+              if (!state.lastSwiped) return;
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              undoSwipe();
+            }}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              styles.undoBtn,
+              { shadowColor: colors.foreground, borderColor: colors.border, opacity: state.lastSwiped ? 1 : 0.3 },
+              pressed && state.lastSwiped && { transform: [{ scale: 0.92 }] },
+            ]}
+          >
+            <Text style={[styles.undoIcon, { color: colors.muted }]}>↩</Text>
+          </Pressable>
+
           {/* Pass */}
           <Pressable
+            accessibilityLabel="Pass"
+            accessibilityRole="button"
             onPress={handlePassButton}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -416,6 +471,8 @@ export default function DiscoverScreen() {
 
           {/* Super Like */}
           <Pressable
+            accessibilityLabel="Super Like"
+            accessibilityRole="button"
             onPress={handleSuperLikeButton}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -429,6 +486,8 @@ export default function DiscoverScreen() {
 
           {/* Like */}
           <Pressable
+            accessibilityLabel="Like"
+            accessibilityRole="button"
             onPress={handleLikeButton}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -453,6 +512,16 @@ export default function DiscoverScreen() {
       <Animated.View style={[styles.toast, toastStyle]}>
         <Text style={styles.toastText}>{toastMessage}</Text>
       </Animated.View>
+
+      {/* Cover screen — shown during initial data load */}
+      {coverVisible && (
+        <RNAnimated.View style={[styles.coverScreen, { backgroundColor: colors.background, opacity: coverOpacity }]}>
+          <Text style={styles.coverEmoji}>🍽️</Text>
+          <Text style={[styles.coverTitle, { color: colors.primary }]}>FoodSwipe</Text>
+          <Text style={[styles.coverSubtitle, { color: colors.muted }]}>We're coming…</Text>
+          <ActivityIndicator color={colors.primary} style={styles.coverSpinner} />
+        </RNAnimated.View>
+      )}
 
       {/* Settings Modal */}
       <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
@@ -617,6 +686,17 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  undoBtn: {
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  undoIcon: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
   passBtn: {
     backgroundColor: "#fff",
     borderWidth: 2,
@@ -670,5 +750,52 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  coverScreen: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+    gap: 8,
+  },
+  coverEmoji: {
+    fontSize: 56,
+    marginBottom: 8,
+  },
+  coverTitle: {
+    fontSize: 40,
+    fontWeight: "900",
+    letterSpacing: -1,
+  },
+  coverSubtitle: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  coverSpinner: {
+    marginTop: 24,
+  },
+  skeletonCard: {
+    position: "absolute",
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 20,
+    backgroundColor: "rgba(128,128,128,0.12)",
+    alignSelf: "center",
+    overflow: "hidden",
+    justifyContent: "flex-end",
+    padding: 20,
+    gap: 10,
+  },
+  skeletonLine1: {
+    height: 20,
+    borderRadius: 10,
+    width: "55%",
+    backgroundColor: "rgba(128,128,128,0.25)",
+  },
+  skeletonLine2: {
+    height: 14,
+    borderRadius: 7,
+    width: "38%",
+    backgroundColor: "rgba(128,128,128,0.18)",
   },
 });

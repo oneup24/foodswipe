@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   Pressable,
+  TextInput,
   Dimensions,
   Alert,
   AlertButton,
@@ -123,6 +124,8 @@ function RestaurantCard({
 
   return (
     <Pressable
+      accessibilityLabel={restaurant.name}
+      accessibilityRole="button"
       onPress={() => onPress(restaurant)}
       onLongPress={handleLongPress}
       style={({ pressed }) => [
@@ -188,6 +191,15 @@ function RestaurantCard({
           { backgroundColor: restaurant.isOpen ? "#34C759" : "#FF3B30" },
         ]}
       />
+
+      {/* More actions button */}
+      <Pressable
+        onPress={(e) => { e.stopPropagation?.(); handleLongPress(); }}
+        style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.7 }]}
+        hitSlop={8}
+      >
+        <Text style={styles.moreBtnText}>⋯</Text>
+      </Pressable>
     </Pressable>
   );
 }
@@ -201,6 +213,19 @@ export default function LikedScreen() {
   const [plans, setPlans] = useState<PlannedVisit[]>([]);
   const [planningRestaurant, setPlanningRestaurant] = useState<Restaurant | null>(null);
   const [savingToListRestaurant, setSavingToListRestaurant] = useState<Restaurant | null>(null);
+  const [query, setQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState<"recent" | "rating" | "name">("recent");
+
+  const displayedRestaurants = useMemo(() => {
+    let list = [...state.likedRestaurants];
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter((r) => r.name.toLowerCase().includes(q));
+    }
+    if (sortOrder === "rating") list.sort((a, b) => b.rating - a.rating);
+    if (sortOrder === "name") list.sort((a, b) => a.name.localeCompare(b.name));
+    return list;
+  }, [state.likedRestaurants, query, sortOrder]);
 
   // Load saved plans on mount
   useEffect(() => {
@@ -309,7 +334,7 @@ export default function LikedScreen() {
           )}
         </View>
         {state.likedRestaurants.length > 0 && (
-          <Text style={[styles.headerSub, { color: colors.muted }]}>Most recent first</Text>
+          <Text style={[styles.headerSub, { color: colors.muted }]}>{displayedRestaurants.length} saved</Text>
         )}
       </View>
 
@@ -336,11 +361,40 @@ export default function LikedScreen() {
         </View>
       ) : (
         <>
-          <Text style={[styles.hintText, { color: colors.muted }]}>
-            Long press to share or remove · Tap to view details
-          </Text>
+          {/* Search */}
+          <View style={[styles.searchRow, { borderBottomColor: colors.border }]}>
+            <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.searchIcon, { color: colors.muted }]}>🔍</Text>
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search saved restaurants…"
+                placeholderTextColor={colors.muted}
+                style={[styles.searchInput, { color: colors.foreground }]}
+                clearButtonMode="while-editing"
+              />
+            </View>
+          </View>
+          {/* Sort chips */}
+          <View style={[styles.sortRow, { borderBottomColor: colors.border }]}>
+            {(["recent", "rating", "name"] as const).map((s) => (
+              <Pressable
+                key={s}
+                onPress={() => setSortOrder(s)}
+                style={[
+                  styles.sortChip,
+                  { borderColor: colors.border },
+                  sortOrder === s && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+              >
+                <Text style={[styles.sortChipText, { color: sortOrder === s ? "#fff" : colors.muted }]}>
+                  {s === "recent" ? "Recent" : s === "rating" ? "Rating ↓" : "A–Z"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <FlatList
-            data={state.likedRestaurants}
+            data={displayedRestaurants}
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
             numColumns={2}
@@ -448,11 +502,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     fontWeight: "700",
-  },
-  hintText: {
-    fontSize: 12,
-    textAlign: "center",
-    paddingVertical: 8,
   },
   grid: {
     padding: 16,
@@ -578,6 +627,21 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#fff",
   },
+  moreBtn: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  moreBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 1,
+  },
   emptyState: {
     flex: 1,
     alignItems: "center",
@@ -672,6 +736,45 @@ const styles = StyleSheet.create({
   },
   planCancelText: {
     fontSize: 15,
+    fontWeight: "600",
+  },
+  searchRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  searchIcon: {
+    fontSize: 15,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  sortRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+  },
+  sortChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  sortChipText: {
+    fontSize: 13,
     fontWeight: "600",
   },
 });

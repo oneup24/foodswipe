@@ -23,10 +23,11 @@ type Action =
   | { type: "SET_LISTS"; lists: UserList[] }
   | { type: "CREATE_LIST"; list: UserList }
   | { type: "DELETE_LIST"; id: string }
-  | { type: "RENAME_LIST"; id: string; name: string; emoji: string }
+  | { type: "RENAME_LIST"; id: string; name: string; emoji: string; description?: string }
   | { type: "ADD_TO_LIST"; listId: string; restaurantId: string }
   | { type: "REMOVE_FROM_LIST"; listId: string; restaurantId: string }
-  | { type: "REMOVE_RESTAURANT_FROM_ALL"; restaurantId: string };
+  | { type: "REMOVE_RESTAURANT_FROM_ALL"; restaurantId: string }
+  | { type: "UPDATE_SHARE_TOKEN"; id: string; token: string };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -43,7 +44,9 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         lists: state.lists.map((l) =>
-          l.id === action.id ? { ...l, name: action.name, emoji: action.emoji } : l
+          l.id === action.id
+            ? { ...l, name: action.name, emoji: action.emoji, description: action.description }
+            : l
         ),
       };
 
@@ -76,6 +79,14 @@ function reducer(state: State, action: Action): State {
         })),
       };
 
+    case "UPDATE_SHARE_TOKEN":
+      return {
+        ...state,
+        lists: state.lists.map((l) =>
+          l.id === action.id ? { ...l, shareToken: action.token } : l
+        ),
+      };
+
     default:
       return state;
   }
@@ -84,13 +95,14 @@ function reducer(state: State, action: Action): State {
 // --- Context ---
 type ListsContextValue = {
   lists: UserList[];
-  createList: (name: string, emoji: string) => void;
+  createList: (name: string, emoji: string, description?: string) => void;
   deleteList: (id: string) => void;
-  renameList: (id: string, name: string, emoji: string) => void;
+  renameList: (id: string, name: string, emoji: string, description?: string) => void;
   addToList: (listId: string, restaurantId: string) => void;
   removeFromList: (listId: string, restaurantId: string) => void;
   removeRestaurantFromAll: (restaurantId: string) => void;
   listsForRestaurant: (restaurantId: string) => UserList[];
+  setShareToken: (id: string, token: string) => void;
 };
 
 const ListsContext = createContext<ListsContextValue | null>(null);
@@ -126,7 +138,7 @@ export function ListsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(LISTS_KEY, JSON.stringify(state.lists));
   }, [state.lists, state.loaded]);
 
-  const createList = useCallback((name: string, emoji: string) => {
+  const createList = useCallback((name: string, emoji: string, description?: string) => {
     const list: UserList = {
       id: `custom_${Date.now()}`,
       name,
@@ -134,6 +146,7 @@ export function ListsProvider({ children }: { children: React.ReactNode }) {
       restaurantIds: [],
       createdAt: Date.now(),
       isDefault: false,
+      ...(description ? { description } : {}),
     };
     dispatch({ type: "CREATE_LIST", list });
   }, []);
@@ -142,8 +155,8 @@ export function ListsProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: "DELETE_LIST", id });
   }, []);
 
-  const renameList = useCallback((id: string, name: string, emoji: string) => {
-    dispatch({ type: "RENAME_LIST", id, name, emoji });
+  const renameList = useCallback((id: string, name: string, emoji: string, description?: string) => {
+    dispatch({ type: "RENAME_LIST", id, name, emoji, description });
   }, []);
 
   const addToList = useCallback((listId: string, restaurantId: string) => {
@@ -163,6 +176,10 @@ export function ListsProvider({ children }: { children: React.ReactNode }) {
     [state.lists]
   );
 
+  const setShareToken = useCallback((id: string, token: string) => {
+    dispatch({ type: "UPDATE_SHARE_TOKEN", id, token });
+  }, []);
+
   return (
     <ListsContext.Provider
       value={{
@@ -174,6 +191,7 @@ export function ListsProvider({ children }: { children: React.ReactNode }) {
         removeFromList,
         removeRestaurantFromAll,
         listsForRestaurant,
+        setShareToken,
       }}
     >
       {children}

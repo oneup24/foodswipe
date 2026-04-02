@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   Alert,
   Share,
   Platform,
+  ActivityIndicator,
+  Modal,
+  TextInput,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,6 +20,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useLists } from "@/lib/lists-context";
 import { useSwipe } from "@/lib/swipe-context";
+import { trpc } from "@/lib/trpc";
+import { useLanguage } from "@/hooks/use-language";
 import { useColors } from "@/hooks/use-colors";
 import { Restaurant } from "@/lib/types";
 
@@ -89,8 +94,13 @@ export default function ListDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { lists, removeFromList } = useLists();
+  const { t } = useLanguage();
+  const { lists, removeFromList, setShareToken, renameList } = useLists();
   const { state } = useSwipe();
+  const shareMutation = trpc.list.share.useMutation();
+  const [isSharing, setIsSharing] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
 
   const list = lists.find((l) => l.id === id);
 
@@ -107,6 +117,54 @@ export default function ListDetailScreen() {
     },
     [list, removeFromList]
   );
+
+  const openDescEdit = useCallback(() => {
+    setDescDraft(list?.description ?? "");
+    setEditingDesc(true);
+  }, [list]);
+
+  const handleSaveDesc = useCallback(() => {
+    if (!list) return;
+    renameList(list.id, list.name, list.emoji, descDraft.trim() || undefined);
+    setEditingDesc(false);
+  }, [list, descDraft, renameList]);
+
+  const handleShare = useCallback(async () => {
+    if (!list) return;
+    setIsSharing(true);
+    try {
+      let url: string;
+      if (list.shareToken) {
+        url = list.shareToken;
+      } else {
+        const result = await shareMutation.mutateAsync({
+          name: list.name,
+          emoji: list.emoji,
+          description: list.description,
+          restaurants: restaurants.map((r) => ({
+            id: r.id,
+            name: r.name,
+            cuisine: r.cuisine,
+            rating: r.rating,
+            priceLevel: r.priceLevel,
+            imageUrl: r.imageUrl,
+            address: r.address,
+          })),
+        });
+        url = result.url;
+        setShareToken(list.id, result.url);
+      }
+      await Share.share({
+        title: `${list.emoji} ${list.name}`,
+        message: `Check out my FoodSwipe list "${list.name}"! ${url}`,
+        url,
+      });
+    } catch {
+      Alert.alert("Couldn't share", "Please try again.");
+    } finally {
+      setIsSharing(false);
+    }
+  }, [list, restaurants, shareMutation, setShareToken]);
 
   const renderItem = useCallback(
     ({ item }: { item: Restaurant }) => (
@@ -145,6 +203,81 @@ export default function ListDetailScreen() {
         </View>
         <View style={styles.backBtn2} />
       </View>
+
+      {/* Description + Share strip */}
+      <View style={[styles.descShareStrip, { borderBottomColor: colors.border }]}>
+        <Pressable onPress={openDescEdit} style={styles.descRow}>
+          {list.description ? (
+            <Text style={[styles.descText, { color: colors.muted, flex: 1 }]} numberOfLines={2}>{list.description}</Text>
+          ) : (
+            <Text style={[styles.descPlaceholder, { color: colors.muted }]}>+ Add description</Text>
+          )}
+          <Text style={[styles.editBtn, { color: colors.primary }]}>Edit</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleShare}
+          disabled={isSharing}
+          accessibilityLabel={t('list.shareList')}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.shareBtn,
+            { backgroundColor: colors.primary },
+            pressed && { opacity: 0.85 },
+            isSharing && { opacity: 0.6 },
+          ]}
+        >
+          {isSharing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <IconSymbol name="square.and.arrow.up" size={16} color="#fff" />
+              <Text style={styles.shareBtnText}>{t('list.shareList')}</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+
+      {/* Inline description edit modal */}
+      <Modal
+        visible={editingDesc}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditingDesc(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setEditingDesc(false)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: colors.surface }]} onPress={() => {}}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>List Description</Text>
+            <TextInput
+              value={descDraft}
+              onChangeText={setDescDraft}
+              placeholder="Add a description for your list…"
+              placeholderTextColor={colors.muted}
+              style={[styles.descInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+              multiline
+              numberOfLines={3}
+              maxLength={120}
+              autoFocus
+              blurOnSubmit
+              returnKeyType="done"
+              onSubmitEditing={handleSaveDesc}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setEditingDesc(false)}
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSaveDesc}
+                style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={styles.confirmText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {restaurants.length === 0 ? (
         <View style={styles.empty}>
@@ -206,6 +339,96 @@ const styles = StyleSheet.create({
     width: 44,
     alignItems: "center",
     justifyContent: "center",
+  },
+  descShareStrip: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 10,
+    borderBottomWidth: 0.5,
+  },
+  descRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  descText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  descPlaceholder: {
+    fontSize: 14,
+    flex: 1,
+    fontStyle: "italic",
+  },
+  editBtn: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  descInput: {
+    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    alignItems: "center",
+  },
+  cancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  confirmText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  shareBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   hintText: {
     fontSize: 12,

@@ -4,6 +4,7 @@ import React, {
   useReducer,
   useEffect,
   useCallback,
+  useRef,
   ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -14,6 +15,19 @@ import { useLanguage } from "../hooks/use-language";
 
 const LIKED_STORAGE_KEY = "@foodswipe_liked";
 const CUISINE_PREFS_KEY = "@foodswipe_cuisine_prefs";
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 type State = {
   cardStack: Restaurant[];
@@ -29,6 +43,8 @@ type State = {
   searchRadius: number;
   isFetchingMore: boolean;
   cuisineScores: Record<string, number>;
+  lastSwiped: { restaurant: Restaurant; type: "right" | "left" | "up"; wasLikedBefore: boolean } | null;
+  hasError: boolean;
 };
 
 type Action =
@@ -44,7 +60,9 @@ type Action =
   | { type: "SET_FETCHING_MORE"; loading: boolean }
   | { type: "RESET_STACK" }
   | { type: "SET_LOADING"; loading: boolean }
-  | { type: "SET_CUISINE_SCORES"; scores: Record<string, number> };
+  | { type: "SET_CUISINE_SCORES"; scores: Record<string, number> }
+  | { type: "UNDO_SWIPE" }
+  | { type: "SET_ERROR"; hasError: boolean };
 
 const DEFAULT_FILTERS: FilterState = {
   cuisines: [],
@@ -81,9 +99,17 @@ function filterRestaurants(all: Restaurant[], filters: FilterState): Restaurant[
   });
 }
 
+function fisherYates<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function buildStack(all: Restaurant[], filters: FilterState): Restaurant[] {
-  const filtered = filterRestaurants(all, filters);
-  return [...filtered].sort(() => Math.random() - 0.5);
+  return fisherYates(filterRestaurants(all, filters));
 }
 
 function reducer(state: State, action: Action): State {
@@ -98,7 +124,7 @@ function reducer(state: State, action: Action): State {
       action.restaurant.cuisine.forEach((c) => {
         newScores[c] = (newScores[c] ?? 0) + 2;
       });
-      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores };
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores, lastSwiped: { restaurant: action.restaurant, type: "right", wasLikedBefore: alreadyLiked } };
     }
     case "SWIPE_UP": {
       const newStack = state.cardStack.slice(1);
@@ -110,7 +136,7 @@ function reducer(state: State, action: Action): State {
       action.restaurant.cuisine.forEach((c) => {
         newScores[c] = (newScores[c] ?? 0) + 3;
       });
-      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores };
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores, lastSwiped: { restaurant: action.restaurant, type: "up", wasLikedBefore: alreadyLiked } };
     }
     case "SWIPE_LEFT": {
       const passed = state.cardStack[0];
@@ -120,7 +146,24 @@ function reducer(state: State, action: Action): State {
           newScores[c] = Math.max(0, (newScores[c] ?? 0) - 1);
         });
       }
-      return { ...state, cardStack: state.cardStack.slice(1), cuisineScores: newScores };
+      return { ...state, cardStack: state.cardStack.slice(1), cuisineScores: newScores, lastSwiped: passed ? { restaurant: passed, type: "left", wasLikedBefore: false } : state.lastSwiped };
+    }
+    case "UNDO_SWIPE": {
+      if (!state.lastSwiped) return state;
+      const { restaurant, type, wasLikedBefore } = state.lastSwiped;
+      const newStack = [restaurant, ...state.cardStack];
+      const newScores = { ...state.cuisineScores };
+      if (type === "right") {
+        restaurant.cuisine.forEach((c) => { newScores[c] = Math.max(0, (newScores[c] ?? 0) - 2); });
+      } else if (type === "up") {
+        restaurant.cuisine.forEach((c) => { newScores[c] = Math.max(0, (newScores[c] ?? 0) - 3); });
+      } else {
+        restaurant.cuisine.forEach((c) => { newScores[c] = (newScores[c] ?? 0) + 1; });
+      }
+      const newLiked = (type === "right" || type === "up") && !wasLikedBefore
+        ? state.likedRestaurants.filter((r) => r.id !== restaurant.id)
+        : state.likedRestaurants;
+      return { ...state, cardStack: newStack, likedRestaurants: newLiked, cuisineScores: newScores, lastSwiped: null };
     }
     case "SET_LIKED":
       return { ...state, likedRestaurants: action.liked };
@@ -159,14 +202,20 @@ function reducer(state: State, action: Action): State {
         searchLat: state.location.lat,
         searchLng: state.location.lng,
         searchRadius: 2000,
+        hasError: false,
       };
     }
     case "APPEND_RESTAURANTS": {
-      const newOnes = action.restaurants.filter((r) => !state.seenPlaceIds.has(r.id));
+      const newOnes = action.restaurants
+        .filter((r) => !state.seenPlaceIds.has(r.id))
+        .map((r) => ({
+          ...r,
+          distance: Math.round(haversineKm(state.location.lat, state.location.lng, r.lat, r.lng) * 10) / 10,
+        }));
       const newSeenIds = new Set(state.seenPlaceIds);
       action.restaurants.forEach((r) => newSeenIds.add(r.id));
       const filteredNew = filterRestaurants(newOnes, state.filters);
-      const shuffledNew = [...filteredNew].sort(() => Math.random() - 0.5);
+      const shuffledNew = fisherYates(filteredNew);
       return {
         ...state,
         allRestaurants: [...state.allRestaurants, ...newOnes],
@@ -176,7 +225,6 @@ function reducer(state: State, action: Action): State {
         searchLat: action.searchLat,
         searchLng: action.searchLng,
         searchRadius: action.searchRadius,
-        isFetchingMore: false,
       };
     }
     case "SET_FETCHING_MORE":
@@ -189,6 +237,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, isLoading: action.loading };
     case "SET_CUISINE_SCORES":
       return { ...state, cuisineScores: action.scores };
+    case "SET_ERROR":
+      return { ...state, hasError: action.hasError };
     default:
       return state;
   }
@@ -199,7 +249,9 @@ type SwipeContextType = {
   swipeRight: (restaurant: Restaurant) => void;
   swipeLeft: () => void;
   swipeUp: (restaurant: Restaurant) => void;
+  undoSwipe: () => void;
   unlike: (id: string) => void;
+  clearAllLiked: () => void;
   setFilters: (filters: FilterState) => void;
   setLocation: (location: LocationState) => void;
   resetStack: () => void;
@@ -224,21 +276,36 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     searchRadius: 2000,
     isFetchingMore: false,
     cuisineScores: {},
+    lastSwiped: null,
+    hasError: false,
   });
 
   const { currentLanguage } = useLanguage();
   const utils = trpc.useUtils();
 
+  // Per-session jitter: ±0.002° (~220 m) so each launch queries a slightly different spot
+  // and Google returns a different ranked pool — keeps the "blind box" feeling fresh
+  const jitter = useRef({
+    lat: (Math.random() - 0.5) * 0.004,
+    lng: (Math.random() - 0.5) * 0.004,
+  });
+
   // Initial fetch via useQuery — re-runs whenever location changes
   const { data: nearbyData, isLoading: isFetchingRestaurants, error: trpcError } =
     trpc.places.nearbyRestaurants.useQuery(
-      { lat: state.location.lat, lng: state.location.lng, radius: 2000, language: currentLanguage as 'en' | 'es' | 'ja' | 'zh-HK' },
+      {
+        lat: state.location.lat + jitter.current.lat,
+        lng: state.location.lng + jitter.current.lng,
+        radius: 2000,
+        language: currentLanguage as 'en' | 'es' | 'ja' | 'zh-HK',
+      },
       { retry: false },
     );
 
   useEffect(() => {
     if (trpcError) {
       console.error("🚨 tRPC nearbyRestaurants error:", trpcError.message);
+      dispatch({ type: "SET_ERROR", hasError: true });
     }
     if (nearbyData) {
       console.log("✅ Got", nearbyData.restaurants.length, "restaurants from Google Places API");
@@ -269,18 +336,18 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     let radius = snap.searchRadius;
     let pageToken: string | null = snap.nextPageToken;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      // First attempt: use page token if available. Subsequent attempts: random offset.
-      if (attempt > 0 || !pageToken) {
-        const magnitude = 0.01 + Math.random() * 0.04;
-        const angle = Math.random() * 2 * Math.PI;
-        lat = snap.location.lat + magnitude * Math.sin(angle);
-        lng = snap.location.lng + magnitude * Math.cos(angle);
-        radius = Math.min(radius + 500, snap.filters.maxDistance * 1000);
-        pageToken = null;
-      }
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // First attempt: use page token if available. Subsequent attempts: random offset.
+        if (attempt > 0 || !pageToken) {
+          const magnitude = 0.01 + Math.random() * 0.04;
+          const angle = Math.random() * 2 * Math.PI;
+          lat = snap.location.lat + magnitude * Math.sin(angle);
+          lng = snap.location.lng + magnitude * Math.cos(angle);
+          radius = Math.min(radius + 500, snap.filters.maxDistance * 1000);
+          pageToken = null;
+        }
 
-      try {
         const result = await utils.places.nearbyRestaurants.fetch({
           lat,
           lng,
@@ -302,19 +369,15 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         });
 
         if (newCount >= 5) return;
-
         // Fewer than 5 novel results — loop with a new offset
-        if (attempt < 2) {
-          dispatch({ type: "SET_FETCHING_MORE", loading: true });
-          pageToken = null;
-        }
-      } catch (err) {
-        console.error("fetchMoreRestaurants error:", err);
-        dispatch({ type: "SET_FETCHING_MORE", loading: false });
-        return;
+        pageToken = null;
       }
+    } catch (err) {
+      console.error("fetchMoreRestaurants error:", err);
+    } finally {
+      dispatch({ type: "SET_FETCHING_MORE", loading: false });
     }
-  }, [utils]);
+  }, [utils, currentLanguage]);
 
   // Pre-fetch next batch when the stack gets low (≤5 cards left)
   useEffect(() => {
@@ -343,11 +406,23 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         const [address] = await Location.reverseGeocodeAsync({
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
-        });
+        }).catch(() => [null]);
 
-        const cityName =
-          [address?.city, address?.region, address?.country].filter(Boolean).join(", ") ||
-          "My Location";
+        const nativeCity = [address?.city, address?.region, address?.country]
+          .filter(Boolean)
+          .join(", ");
+
+        let cityName = nativeCity;
+        if (!cityName) {
+          try {
+            const geo = await utils.places.reverseGeocode.fetch({
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+            });
+            cityName = geo.cityName ?? "";
+          } catch {}
+        }
+        cityName = cityName || "My Location";
 
         dispatch({
           type: "SET_LOCATION",
@@ -397,12 +472,20 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SWIPE_LEFT" });
   }, []);
 
+  const undoSwipe = useCallback(() => {
+    dispatch({ type: "UNDO_SWIPE" });
+  }, []);
+
   const swipeUp = useCallback((restaurant: Restaurant) => {
     dispatch({ type: "SWIPE_UP", restaurant });
   }, []);
 
   const unlike = useCallback((id: string) => {
     dispatch({ type: "UNLIKE", id });
+  }, []);
+
+  const clearAllLiked = useCallback(() => {
+    dispatch({ type: "SET_LIKED", liked: [] });
   }, []);
 
   const setFilters = useCallback((filters: FilterState) => {
@@ -426,7 +509,9 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         swipeRight,
         swipeLeft,
         swipeUp,
+        undoSwipe,
         unlike,
+        clearAllLiked,
         setFilters,
         setLocation,
         resetStack,

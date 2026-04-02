@@ -48,13 +48,21 @@ const MAPPING = {
   "clock.fill": "access-time",
   "dollarsign.circle": "attach-money",
   "mappin.and.ellipse": "place",
+  "person.fill": "person",
+  "person": "person-outline",
   "person.2.fill": "people",
+  "phone.fill": "phone",
+  "globe": "language",
+  "photo": "photo",
+  "link": "link",
   "flame.fill": "local-fire-department",
   "bolt.fill": "bolt",
   "checkmark.circle.fill": "check-circle",
   "trash.fill": "delete",
   "gearshape.fill": "settings",
   "arrow.left": "arrow-back",
+  "moon.fill": "dark-mode",
+  "sun.max.fill": "light-mode",
 } as unknown as IconMapping;
 
 /**

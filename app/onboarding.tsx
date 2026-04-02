@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 
@@ -72,11 +73,13 @@ export default function OnboardingScreen() {
   const finish = useCallback(async () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await AsyncStorage.setItem(ONBOARDING_KEY, "1");
+    if (Platform.OS !== "web") await Location.requestForegroundPermissionsAsync();
     router.replace("/(tabs)");
   }, [router]);
 
   const skip = useCallback(async () => {
     await AsyncStorage.setItem(ONBOARDING_KEY, "1");
+    if (Platform.OS !== "web") await Location.requestForegroundPermissionsAsync();
     router.replace("/(tabs)");
   }, [router]);
 

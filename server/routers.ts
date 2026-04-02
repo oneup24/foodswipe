@@ -6,6 +6,8 @@ import { ENV } from "./_core/env";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import { sharedListStore } from "./list-store.js";
 
 function getRegionalFoodDomains(lat: number, lng: number): string {
   // Hong Kong
@@ -490,6 +492,62 @@ export const appRouter = router({
         // New API doesn't use page tokens; fetchMoreRestaurants handles pagination via random offsets
         return { restaurants, nextPageToken: null };
       }),
+
+    reverseGeocode: publicProcedure
+      .input(z.object({ lat: z.number(), lng: z.number() }))
+      .query(async ({ input }) => {
+        try {
+          const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${input.lat},${input.lng}&result_type=locality|sublocality|administrative_area_level_1&key=${ENV.googlePlacesApiKey}`;
+          const res = await fetch(url);
+          const data = await res.json() as any;
+          if (data.status !== "OK" || !data.results?.[0]) return { cityName: null };
+          const components = data.results[0].address_components as { long_name: string; types: string[] }[];
+          const subloc = components.find((c) => c.types.includes("sublocality_level_1") || c.types.includes("sublocality"))?.long_name;
+          const locality = components.find((c) => c.types.includes("locality"))?.long_name;
+          const admin1 = components.find((c) => c.types.includes("administrative_area_level_1"))?.long_name;
+          const country = components.find((c) => c.types.includes("country"))?.long_name;
+          const city = subloc ?? locality ?? admin1;
+          return { cityName: [city, country].filter(Boolean).join(", ") || null };
+        } catch {
+          return { cityName: null };
+        }
+      }),
+  }),
+
+  list: router({
+    share: publicProcedure
+      .input(z.object({
+        name: z.string(),
+        emoji: z.string(),
+        description: z.string().optional(),
+        restaurants: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          cuisine: z.array(z.string()),
+          rating: z.number(),
+          priceLevel: z.number(),
+          imageUrl: z.string(),
+          address: z.string(),
+        })),
+      }))
+      .mutation(({ input, ctx }) => {
+        const token = crypto.randomBytes(12).toString("hex");
+        const proto = (ctx.req.headers["x-forwarded-proto"] as string) ?? ctx.req.protocol;
+        const host = (ctx.req.headers["x-forwarded-host"] as string) ?? (ctx.req.get("host") ?? "localhost");
+        const serverBase = `${proto}://${host}`;
+        sharedListStore.set(token, {
+          name: input.name,
+          emoji: input.emoji,
+          description: input.description ?? "",
+          restaurants: input.restaurants,
+          createdAt: Date.now(),
+        });
+        return { token, url: `${serverBase}/s/${token}` };
+      }),
+
+    getShared: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(({ input }) => sharedListStore.get(input.token) ?? null),
   }),
 
   friendSession: router({

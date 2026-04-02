@@ -194,6 +194,7 @@ export default function LocationPickerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const utils = trpc.useUtils();
   const [query, setQuery] = useState("");
   const [isLocating, setIsLocating] = useState(false);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
@@ -267,12 +268,23 @@ export default function LocationPickerScreen() {
       const [address] = await Location.reverseGeocodeAsync({
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
-      });
+      }).catch(() => [null]);
 
-      const cityName =
-        [address?.district ?? address?.subregion, address?.city, address?.country]
-          .filter(Boolean)
-          .join(", ") || "My Location";
+      const nativeCity = [address?.district ?? address?.subregion, address?.city, address?.country]
+        .filter(Boolean)
+        .join(", ");
+
+      let cityName = nativeCity;
+      if (!cityName) {
+        try {
+          const geo = await utils.places.reverseGeocode.fetch({
+            lat: loc.coords.latitude,
+            lng: loc.coords.longitude,
+          });
+          cityName = geo.cityName ?? "";
+        } catch {}
+      }
+      cityName = cityName || "My Location";
 
       const newLoc: LocationState = {
         lat: loc.coords.latitude,
