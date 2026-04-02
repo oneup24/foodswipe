@@ -55,6 +55,8 @@ const MAPPING = {
   "trash.fill": "delete",
   "gearshape.fill": "settings",
   "arrow.left": "arrow-back",
+  "moon.fill": "dark-mode",
+  "sun.max.fill": "light-mode",
 } as unknown as IconMapping;
 
 /**
