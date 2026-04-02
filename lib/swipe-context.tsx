@@ -195,7 +195,6 @@ function reducer(state: State, action: Action): State {
         searchLat: action.searchLat,
         searchLng: action.searchLng,
         searchRadius: action.searchRadius,
-        isFetchingMore: false,
       };
     }
     case "SET_FETCHING_MORE":
@@ -290,18 +289,18 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     let radius = snap.searchRadius;
     let pageToken: string | null = snap.nextPageToken;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      // First attempt: use page token if available. Subsequent attempts: random offset.
-      if (attempt > 0 || !pageToken) {
-        const magnitude = 0.01 + Math.random() * 0.04;
-        const angle = Math.random() * 2 * Math.PI;
-        lat = snap.location.lat + magnitude * Math.sin(angle);
-        lng = snap.location.lng + magnitude * Math.cos(angle);
-        radius = Math.min(radius + 500, snap.filters.maxDistance * 1000);
-        pageToken = null;
-      }
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // First attempt: use page token if available. Subsequent attempts: random offset.
+        if (attempt > 0 || !pageToken) {
+          const magnitude = 0.01 + Math.random() * 0.04;
+          const angle = Math.random() * 2 * Math.PI;
+          lat = snap.location.lat + magnitude * Math.sin(angle);
+          lng = snap.location.lng + magnitude * Math.cos(angle);
+          radius = Math.min(radius + 500, snap.filters.maxDistance * 1000);
+          pageToken = null;
+        }
 
-      try {
         const result = await utils.places.nearbyRestaurants.fetch({
           lat,
           lng,
@@ -323,19 +322,15 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
         });
 
         if (newCount >= 5) return;
-
         // Fewer than 5 novel results — loop with a new offset
-        if (attempt < 2) {
-          dispatch({ type: "SET_FETCHING_MORE", loading: true });
-          pageToken = null;
-        }
-      } catch (err) {
-        console.error("fetchMoreRestaurants error:", err);
-        dispatch({ type: "SET_FETCHING_MORE", loading: false });
-        return;
+        pageToken = null;
       }
+    } catch (err) {
+      console.error("fetchMoreRestaurants error:", err);
+    } finally {
+      dispatch({ type: "SET_FETCHING_MORE", loading: false });
     }
-  }, [utils]);
+  }, [utils, currentLanguage]);
 
   // Pre-fetch next batch when the stack gets low (≤5 cards left)
   useEffect(() => {
