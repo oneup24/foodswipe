@@ -4,6 +4,7 @@ import React, {
   useReducer,
   useEffect,
   useCallback,
+  useRef,
   ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -98,9 +99,17 @@ function filterRestaurants(all: Restaurant[], filters: FilterState): Restaurant[
   });
 }
 
+function fisherYates<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function buildStack(all: Restaurant[], filters: FilterState): Restaurant[] {
-  const filtered = filterRestaurants(all, filters);
-  return [...filtered].sort(() => Math.random() - 0.5);
+  return fisherYates(filterRestaurants(all, filters));
 }
 
 function reducer(state: State, action: Action): State {
@@ -206,7 +215,7 @@ function reducer(state: State, action: Action): State {
       const newSeenIds = new Set(state.seenPlaceIds);
       action.restaurants.forEach((r) => newSeenIds.add(r.id));
       const filteredNew = filterRestaurants(newOnes, state.filters);
-      const shuffledNew = [...filteredNew].sort(() => Math.random() - 0.5);
+      const shuffledNew = fisherYates(filteredNew);
       return {
         ...state,
         allRestaurants: [...state.allRestaurants, ...newOnes],
@@ -274,10 +283,22 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
   const { currentLanguage } = useLanguage();
   const utils = trpc.useUtils();
 
+  // Per-session jitter: ±0.002° (~220 m) so each launch queries a slightly different spot
+  // and Google returns a different ranked pool — keeps the "blind box" feeling fresh
+  const jitter = useRef({
+    lat: (Math.random() - 0.5) * 0.004,
+    lng: (Math.random() - 0.5) * 0.004,
+  });
+
   // Initial fetch via useQuery — re-runs whenever location changes
   const { data: nearbyData, isLoading: isFetchingRestaurants, error: trpcError } =
     trpc.places.nearbyRestaurants.useQuery(
-      { lat: state.location.lat, lng: state.location.lng, radius: 2000, language: currentLanguage as 'en' | 'es' | 'ja' | 'zh-HK' },
+      {
+        lat: state.location.lat + jitter.current.lat,
+        lng: state.location.lng + jitter.current.lng,
+        radius: 2000,
+        language: currentLanguage as 'en' | 'es' | 'ja' | 'zh-HK',
+      },
       { retry: false },
     );
 

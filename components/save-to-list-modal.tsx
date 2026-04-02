@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 import { useLists } from "@/lib/lists-context";
+import { useSwipe } from "@/lib/swipe-context";
 import { UserList } from "@/lib/types";
 
 const PRESET_EMOJIS = ["📅", "💑", "👨‍👩‍👧", "💼", "💰", "🍜", "🌮", "🍣", "🥂", "🗾", "🏖️", "🎉", "⭐", "❤️", "🔥"];
@@ -25,6 +26,7 @@ interface SaveToListModalProps {
 export function SaveToListModal({ visible, restaurantId, restaurantName, onClose }: SaveToListModalProps) {
   const colors = useColors();
   const { lists, addToList, removeFromList, createList, listsForRestaurant } = useLists();
+  const { state, swipeRight } = useSwipe();
 
   const [creatingNew, setCreatingNew] = useState(false);
   const [newName, setNewName] = useState("");
@@ -39,9 +41,16 @@ export function SaveToListModal({ visible, restaurantId, restaurantName, onClose
         removeFromList(list.id, restaurantId);
       } else {
         addToList(list.id, restaurantId);
+        // Saving to any list implicitly likes the restaurant
+        const isAlreadyLiked = state.likedRestaurants.some((r) => r.id === restaurantId);
+        if (!isAlreadyLiked) {
+          const restaurant = state.allRestaurants.find((r) => r.id === restaurantId)
+            ?? state.likedRestaurants.find((r) => r.id === restaurantId);
+          if (restaurant) swipeRight(restaurant);
+        }
       }
     },
-    [inListIds, addToList, removeFromList, restaurantId]
+    [inListIds, addToList, removeFromList, restaurantId, state, swipeRight]
   );
 
   const handleCreate = useCallback(() => {
@@ -77,7 +86,7 @@ export function SaveToListModal({ visible, restaurantId, restaurantName, onClose
 
           {/* Lists */}
           <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
-            {lists.map((list) => {
+            {[...lists].sort((a, b) => b.createdAt - a.createdAt).map((list) => {
               const checked = inListIds.has(list.id);
               return (
                 <Pressable
