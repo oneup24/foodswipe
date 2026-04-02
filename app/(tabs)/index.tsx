@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   Dimensions,
   Pressable,
   Platform,
-  ScrollView,
   ActivityIndicator,
   Animated as RNAnimated,
 } from "react-native";
@@ -274,56 +273,6 @@ export default function DiscoverScreen() {
   const visibleCards = state.cardStack.slice(0, 4);
   const { isFetchingMore } = state;
 
-  // Quick-filter chips: Open Now, ⭐4+, top cuisine shortcuts
-  const quickChips = useMemo(() => {
-    const chips: { key: string; label: string; active: boolean }[] = [
-      {
-        key: "openNow",
-        label: "Open Now",
-        active: state.filters.openNow,
-      },
-      {
-        key: "rating4",
-        label: "⭐ 4+",
-        active: state.filters.minRating >= 4,
-      },
-    ];
-    // Add top 3 cuisines from preference scores (if any)
-    const topCuisines = Object.entries(cuisineScores)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 3)
-      .map(([c]) => c);
-    const fallbackCuisines = ["Italian", "Japanese", "Korean"];
-    const cuisineList = topCuisines.length >= 1 ? topCuisines : fallbackCuisines;
-    cuisineList.forEach((c) => {
-      chips.push({
-        key: `cuisine_${c}`,
-        label: c,
-        active: state.filters.cuisines.includes(c as any),
-      });
-    });
-    return chips;
-  }, [state.filters, cuisineScores]);
-
-  const handleChipPress = useCallback(
-    (chip: { key: string; active: boolean }) => {
-      if (Platform.OS !== "web") Haptics.selectionAsync();
-      if (chip.key === "openNow") {
-        setFilters({ ...state.filters, openNow: !chip.active });
-      } else if (chip.key === "rating4") {
-        setFilters({ ...state.filters, minRating: chip.active ? 0 : 4 });
-      } else if (chip.key.startsWith("cuisine_")) {
-        const cuisine = chip.key.replace("cuisine_", "") as any;
-        const existing = state.filters.cuisines;
-        const next = chip.active
-          ? existing.filter((c) => c !== cuisine)
-          : [...existing, cuisine];
-        setFilters({ ...state.filters, cuisines: next });
-      }
-    },
-    [state.filters, setFilters]
-  );
-
   return (
     <ScreenContainer containerClassName="bg-background" className="flex-1">
       {/* Header */}
@@ -386,38 +335,6 @@ export default function DiscoverScreen() {
             )}
           </Pressable>
         </View>
-      </View>
-
-      {/* Quick-filter chips */}
-      <View style={[styles.chipsWrapper, { borderBottomColor: colors.border }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
-          {quickChips.map((chip) => (
-            <Pressable
-              key={chip.key}
-              onPress={() => handleChipPress(chip)}
-              style={({ pressed }) => [
-                styles.chip,
-                chip.active
-                  ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                  : { backgroundColor: colors.surface, borderColor: colors.border },
-                pressed && { opacity: 0.75 },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  { color: chip.active ? "#fff" : colors.foreground },
-                ]}
-              >
-                {chip.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
       </View>
 
       {/* Cuisine Suggestion Banner */}
@@ -655,29 +572,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-  },
-  chipsWrapper: {
-    height: 46,
-    borderBottomWidth: 0.5,
-    overflow: "hidden",
-  },
-  chipsRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignItems: "center",
-    height: 46,
-  },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: "600",
   },
   suggestionBanner: {
     flexDirection: "row",
