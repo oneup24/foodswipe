@@ -7,6 +7,8 @@ import {
   Pressable,
   Platform,
   ScrollView,
+  ActivityIndicator,
+  Animated as RNAnimated,
 } from "react-native";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -15,7 +17,6 @@ import Animated, {
   useAnimatedStyle,
   withSequence,
   withTiming,
-  withRepeat,
 } from "react-native-reanimated";
 import { ScreenContainer } from "@/components/screen-container";
 import { SwipeCard } from "@/components/swipe-card";
@@ -34,26 +35,28 @@ const CARD_WIDTH = SCREEN_WIDTH - 32;
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.62;
 
 function SkeletonCard({ index }: { index: number }) {
-  const opacity = useSharedValue(0.4);
+  const opacity = useRef(new RNAnimated.Value(0.4)).current;
   useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(withTiming(0.7, { duration: 450 }), withTiming(0.4, { duration: 450 })),
-      -1,
-      false
+    const anim = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(opacity, { toValue: 0.75, duration: 700, useNativeDriver: true }),
+        RNAnimated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
     );
-  }, []);
-  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
   return (
-    <Animated.View
+    <RNAnimated.View
       style={[
         styles.skeletonCard,
-        animStyle,
+        { opacity },
         { zIndex: 100 - index, top: index * 8, transform: [{ scale: index === 0 ? 1 : 0.95 - index * 0.02 }] },
       ]}
     >
       <View style={styles.skeletonLine1} />
       <View style={styles.skeletonLine2} />
-    </Animated.View>
+    </RNAnimated.View>
   );
 }
 
@@ -77,6 +80,19 @@ export default function DiscoverScreen() {
       }
     }, [params.openFriendSession, router])
   );
+
+  // Cover screen — shown until first batch of cards confirmed
+  const [coverVisible, setCoverVisible] = useState(true);
+  const coverOpacity = useRef(new RNAnimated.Value(1)).current;
+  const coverDismissed = useRef(false);
+
+  useEffect(() => {
+    if (!state.isLoading && state.cardStack.length > 0 && !coverDismissed.current) {
+      coverDismissed.current = true;
+      RNAnimated.timing(coverOpacity, { toValue: 0, duration: 600, useNativeDriver: true })
+        .start(() => setCoverVisible(false));
+    }
+  }, [state.isLoading, state.cardStack.length, coverOpacity]);
 
   // Streak
   const { streakCount, incrementStreak } = useStreak();
@@ -373,35 +389,36 @@ export default function DiscoverScreen() {
       </View>
 
       {/* Quick-filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipsRow}
-        style={[styles.chipsScroll, { borderBottomColor: colors.border }]}
-      >
-        {quickChips.map((chip) => (
-          <Pressable
-            key={chip.key}
-            onPress={() => handleChipPress(chip)}
-            style={({ pressed }) => [
-              styles.chip,
-              chip.active
-                ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                : { backgroundColor: colors.surface, borderColor: colors.border },
-              pressed && { opacity: 0.75 },
-            ]}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                { color: chip.active ? "#fff" : colors.foreground },
+      <View style={[styles.chipsWrapper, { borderBottomColor: colors.border }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
+          {quickChips.map((chip) => (
+            <Pressable
+              key={chip.key}
+              onPress={() => handleChipPress(chip)}
+              style={({ pressed }) => [
+                styles.chip,
+                chip.active
+                  ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                  : { backgroundColor: colors.surface, borderColor: colors.border },
+                pressed && { opacity: 0.75 },
               ]}
             >
-              {chip.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+              <Text
+                style={[
+                  styles.chipText,
+                  { color: chip.active ? "#fff" : colors.foreground },
+                ]}
+              >
+                {chip.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* Cuisine Suggestion Banner */}
       {suggestionCuisine && (
@@ -559,6 +576,16 @@ export default function DiscoverScreen() {
         <Text style={styles.toastText}>{toastMessage}</Text>
       </Animated.View>
 
+      {/* Cover screen — shown during initial data load */}
+      {coverVisible && (
+        <RNAnimated.View style={[styles.coverScreen, { backgroundColor: colors.background, opacity: coverOpacity }]}>
+          <Text style={styles.coverEmoji}>🍽️</Text>
+          <Text style={[styles.coverTitle, { color: colors.primary }]}>FoodSwipe</Text>
+          <Text style={[styles.coverSubtitle, { color: colors.muted }]}>We're coming…</Text>
+          <ActivityIndicator color={colors.primary} style={styles.coverSpinner} />
+        </RNAnimated.View>
+      )}
+
       {/* Settings Modal */}
       <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
 
@@ -629,14 +656,18 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  chipsScroll: {
+  chipsWrapper: {
+    height: 46,
     borderBottomWidth: 0.5,
+    overflow: "hidden",
   },
   chipsRow: {
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    alignItems: "center",
+    height: 46,
   },
   chip: {
     paddingHorizontal: 14,
@@ -805,6 +836,29 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  coverScreen: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+    gap: 8,
+  },
+  coverEmoji: {
+    fontSize: 56,
+    marginBottom: 8,
+  },
+  coverTitle: {
+    fontSize: 40,
+    fontWeight: "900",
+    letterSpacing: -1,
+  },
+  coverSubtitle: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  coverSpinner: {
+    marginTop: 24,
   },
   skeletonCard: {
     position: "absolute",
