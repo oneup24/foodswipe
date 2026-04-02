@@ -226,6 +226,9 @@ export function SwipeCard({
   return (
     <GestureDetector gesture={composedGesture}>
       <Animated.View
+        accessible
+        accessibilityLabel={restaurant.name}
+        accessibilityHint="Swipe right to like, left to pass, up to super like"
         style={[
           styles.card,
           animatedStyle,

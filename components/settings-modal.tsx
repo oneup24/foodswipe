@@ -116,7 +116,11 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                     style={({ pressed }) => [styles.settingRow, pressed && { opacity: 0.7 }]}
                     onPress={() => changeLanguage(lang.code)}
                   >
-                    <Text style={styles.settingIcon}>{lang.flag}</Text>
+                    <View style={[styles.langBadge, { backgroundColor: colors.primary + '20', borderColor: colors.border }]}>
+                      <Text style={[styles.langBadgeText, { color: colors.primary }]}>
+                        {lang.code.toUpperCase().slice(0, 2)}
+                      </Text>
+                    </View>
                     <Text style={[styles.settingLabel, { color: colors.foreground }]}>{lang.label}</Text>
                     {currentLanguage === lang.code && (
                       <Text style={[styles.checkmark, { color: colors.primary }]}>✓</Text>
@@ -203,6 +207,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingIcon: { fontSize: 20, width: 28 },
+  langBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    width: 36,
+    alignItems: 'center',
+  },
+  langBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   settingLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
   settingArrow: { fontSize: 20, fontWeight: '600' },
   checkmark: { fontSize: 18, fontWeight: '700' },

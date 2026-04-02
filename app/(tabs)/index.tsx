@@ -86,12 +86,12 @@ export default function DiscoverScreen() {
   const coverDismissed = useRef(false);
 
   useEffect(() => {
-    if (!state.isLoading && state.cardStack.length > 0 && !coverDismissed.current) {
+    if (!state.isLoading && (state.cardStack.length > 0 || state.hasError) && !coverDismissed.current) {
       coverDismissed.current = true;
       RNAnimated.timing(coverOpacity, { toValue: 0, duration: 600, useNativeDriver: true })
         .start(() => setCoverVisible(false));
     }
-  }, [state.isLoading, state.cardStack.length, coverOpacity]);
+  }, [state.isLoading, state.cardStack.length, state.hasError, coverOpacity]);
 
   // Streak
   const { streakCount, incrementStreak } = useStreak();
@@ -357,7 +357,19 @@ export default function DiscoverScreen() {
 
       {/* Card Stack Area */}
       <View style={styles.cardArea}>
-        {visibleCards.length === 0 ? (
+        {state.hasError ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Couldn't load restaurants</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>Check your connection and try again.</Text>
+            <Pressable
+              onPress={resetStack}
+              style={({ pressed }) => [styles.refreshButton, { backgroundColor: colors.primary }, pressed && { opacity: 0.8 }]}
+            >
+              <Text style={styles.refreshButtonText}>Try Again</Text>
+            </Pressable>
+          </View>
+        ) : visibleCards.length === 0 ? (
           isFetchingMore ? (
             <View style={[styles.cardStack, { width: CARD_WIDTH }]}>
               <SkeletonCard index={1} />
@@ -425,6 +437,8 @@ export default function DiscoverScreen() {
         <View style={styles.actionRow}>
           {/* Undo */}
           <Pressable
+            accessibilityLabel="Undo"
+            accessibilityRole="button"
             onPress={() => {
               if (!state.lastSwiped) return;
               if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -442,6 +456,8 @@ export default function DiscoverScreen() {
 
           {/* Pass */}
           <Pressable
+            accessibilityLabel="Pass"
+            accessibilityRole="button"
             onPress={handlePassButton}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -455,6 +471,8 @@ export default function DiscoverScreen() {
 
           {/* Super Like */}
           <Pressable
+            accessibilityLabel="Super Like"
+            accessibilityRole="button"
             onPress={handleSuperLikeButton}
             style={({ pressed }) => [
               styles.actionBtn,
@@ -468,6 +486,8 @@ export default function DiscoverScreen() {
 
           {/* Like */}
           <Pressable
+            accessibilityLabel="Like"
+            accessibilityRole="button"
             onPress={handleLikeButton}
             style={({ pressed }) => [
               styles.actionBtn,

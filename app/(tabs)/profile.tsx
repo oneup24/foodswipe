@@ -177,6 +177,7 @@ export default function ProfileScreen() {
                       ]}
                     />
                   </View>
+                  <Text style={[styles.barScore, { color: colors.muted }]}>{score}</Text>
                 </View>
               ))}
             </View>
@@ -305,6 +306,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   bar: { height: "100%", borderRadius: 4 },
+  barScore: { fontSize: 12, fontWeight: "600", width: 28, textAlign: "right" },
   emptyProfile: {
     borderRadius: 14,
     borderWidth: 1,

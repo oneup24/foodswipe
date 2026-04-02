@@ -30,6 +30,7 @@ type State = {
   isFetchingMore: boolean;
   cuisineScores: Record<string, number>;
   lastSwiped: { restaurant: Restaurant; type: "right" | "left" | "up"; wasLikedBefore: boolean } | null;
+  hasError: boolean;
 };
 
 type Action =
@@ -46,7 +47,8 @@ type Action =
   | { type: "RESET_STACK" }
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "SET_CUISINE_SCORES"; scores: Record<string, number> }
-  | { type: "UNDO_SWIPE" };
+  | { type: "UNDO_SWIPE" }
+  | { type: "SET_ERROR"; hasError: boolean };
 
 const DEFAULT_FILTERS: FilterState = {
   cuisines: [],
@@ -178,6 +180,7 @@ function reducer(state: State, action: Action): State {
         searchLat: state.location.lat,
         searchLng: state.location.lng,
         searchRadius: 2000,
+        hasError: false,
       };
     }
     case "APPEND_RESTAURANTS": {
@@ -207,6 +210,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, isLoading: action.loading };
     case "SET_CUISINE_SCORES":
       return { ...state, cuisineScores: action.scores };
+    case "SET_ERROR":
+      return { ...state, hasError: action.hasError };
     default:
       return state;
   }
@@ -244,6 +249,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
     isFetchingMore: false,
     cuisineScores: {},
     lastSwiped: null,
+    hasError: false,
   });
 
   const { currentLanguage } = useLanguage();
@@ -259,6 +265,7 @@ export function SwipeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (trpcError) {
       console.error("🚨 tRPC nearbyRestaurants error:", trpcError.message);
+      dispatch({ type: "SET_ERROR", hasError: true });
     }
     if (nearbyData) {
       console.log("✅ Got", nearbyData.restaurants.length, "restaurants from Google Places API");

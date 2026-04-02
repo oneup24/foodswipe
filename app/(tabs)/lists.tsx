@@ -11,17 +11,20 @@ import {
   ScrollView,
   Platform,
 } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLists } from "@/lib/lists-context";
+import { useSwipe } from "@/lib/swipe-context";
 import { useColors } from "@/hooks/use-colors";
 import { UserList } from "@/lib/types";
 
 const PRESET_EMOJIS = ["📅", "💑", "👨‍👩‍👧", "💼", "💰", "🍜", "🌮", "🍣", "🥂", "🗾", "🏖️", "🎉", "⭐", "❤️", "🔥"];
 
-function ListCard({ list, onPress, onLongPress }: { list: UserList; onPress: () => void; onLongPress: () => void }) {
+function ListCard({ list, onPress, onLongPress, previewUrls }: { list: UserList; onPress: () => void; onLongPress: () => void; previewUrls: string[] }) {
   const colors = useColors();
+  const hasPhotos = previewUrls.length > 0;
   return (
     <Pressable
       onPress={onPress}
@@ -32,11 +35,31 @@ function ListCard({ list, onPress, onLongPress }: { list: UserList; onPress: () 
         pressed && { opacity: 0.8, transform: [{ scale: 0.97 }] },
       ]}
     >
-      <Text style={styles.cardEmoji}>{list.emoji}</Text>
-      <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={2}>{list.name}</Text>
-      <Text style={[styles.cardCount, { color: colors.muted }]}>
-        {list.restaurantIds.length} {list.restaurantIds.length === 1 ? "place" : "places"}
-      </Text>
+      {hasPhotos ? (
+        <>
+          <View style={styles.photoStrip}>
+            {previewUrls.slice(0, 3).map((url, i) => (
+              <Image key={i} source={{ uri: url }} style={styles.photoCell} contentFit="cover" />
+            ))}
+            <View style={styles.photoStripOverlay} />
+            <Text style={styles.photoEmoji}>{list.emoji}</Text>
+          </View>
+          <View style={styles.cardTextPadded}>
+            <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>{list.name}</Text>
+            <Text style={[styles.cardCount, { color: colors.muted }]}>
+              {list.restaurantIds.length} {list.restaurantIds.length === 1 ? "place" : "places"}
+            </Text>
+          </View>
+        </>
+      ) : (
+        <View style={styles.cardContent}>
+          <Text style={styles.cardEmoji}>{list.emoji}</Text>
+          <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={2}>{list.name}</Text>
+          <Text style={[styles.cardCount, { color: colors.muted }]}>
+            {list.restaurantIds.length} {list.restaurantIds.length === 1 ? "place" : "places"}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -45,6 +68,7 @@ export default function ListsScreen() {
   const router = useRouter();
   const colors = useColors();
   const { lists, createList, deleteList, renameList } = useLists();
+  const { state: swipeState } = useSwipe();
 
   const [showCreate, setShowCreate] = useState(false);
   const [editingList, setEditingList] = useState<UserList | null>(null);
@@ -98,14 +122,21 @@ export default function ListsScreen() {
   }, [openEdit, deleteList]);
 
   const renderItem = useCallback(
-    ({ item }: { item: UserList }) => (
-      <ListCard
-        list={item}
-        onPress={() => router.push({ pathname: "/list-detail", params: { id: item.id } })}
-        onLongPress={() => handleLongPress(item)}
-      />
-    ),
-    [router, handleLongPress]
+    ({ item }: { item: UserList }) => {
+      const previewUrls = item.restaurantIds
+        .slice(0, 3)
+        .map((id) => swipeState.likedRestaurants.find((r) => r.id === id)?.imageUrl)
+        .filter((url): url is string => !!url);
+      return (
+        <ListCard
+          list={item}
+          onPress={() => router.push({ pathname: "/list-detail", params: { id: item.id } })}
+          onLongPress={() => handleLongPress(item)}
+          previewUrls={previewUrls}
+        />
+      );
+    },
+    [router, handleLongPress, swipeState.likedRestaurants]
   );
 
   return (
@@ -246,12 +277,15 @@ const styles = StyleSheet.create({
     minHeight: 120,
     borderRadius: 18,
     borderWidth: 1,
-    padding: 16,
-    gap: 4,
+    overflow: "hidden",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07,
     shadowRadius: 6,
     elevation: 3,
+  },
+  cardContent: {
+    padding: 16,
+    gap: 4,
   },
   cardEmoji: {
     fontSize: 32,
@@ -266,6 +300,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     marginTop: 2,
+  },
+  photoStrip: {
+    flexDirection: "row",
+    height: 72,
+    position: "relative",
+  },
+  photoCell: {
+    flex: 1,
+    height: "100%",
+  },
+  photoStripOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "50%",
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  photoEmoji: {
+    position: "absolute",
+    top: 6,
+    left: 8,
+    fontSize: 18,
+  },
+  cardTextPadded: {
+    padding: 10,
+    paddingTop: 8,
+    gap: 2,
   },
   empty: {
     alignItems: "center",
